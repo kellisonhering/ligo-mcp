@@ -1,0 +1,11 @@
+gwpy
+gwosc
+astroquery
+anthropic
+fastmcp
+numpy
+matplotlib
+scipy
+setuptools
+gcn-kafka
+requests
