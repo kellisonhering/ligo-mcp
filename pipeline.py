@@ -13,7 +13,12 @@ from dataclasses import dataclass, field
 DOWNLOAD_SOCKET_TIMEOUT = 180  # seconds
 socket.setdefaulttimeout(DOWNLOAD_SOCKET_TIMEOUT)
 
-WINDOW_SECONDS = 4
+WINDOW_SECONDS = 4         # width of the ANALYZED slice (the "outseg")
+FETCH_SECONDS = 32         # W3: fetch a WIDER window so PSD/whitening see real noise
+                           # (4 s is too short to estimate the background; the same 4 s
+                           # was both data and noise estimate → unstable normalization).
+                           # We analyze only the central 4 s via q_transform(outseg=…)
+                           # so the reported metrics still describe the same slice.
 QRANGE = (4, 64)
 FRANGE = (20, 2048)
 # NOTE (W1): "energy contrast" = peak / median Q-transform tile energy. This is a
@@ -97,11 +102,26 @@ class PipelineResult:
     error: str | None = None
 
 
+def _load_injection_spec(spec_path: str) -> dict:
+    """
+    Load a pre-generated injection spec .npz. Returns {H1, L1, inj_H1, inj_L1, gps}.
+    inj_H1 / inj_L1 are numpy arrays sampled at pipeline SAMPLE_RATE, aligned to a
+    32 s window centered on `gps`. They are all-zeros for noise-only controls.
+    NOTE: this is called from run_pipeline when an injection is requested; the
+    pipeline SUMS these into the fetched strain and never tells the planner.
+    """
+    z = np.load(spec_path)
+    return {"H1": z["H1"], "L1": z["L1"],
+            "inj_H1": z["inj_H1"], "inj_L1": z["inj_L1"],
+            "gps": float(z["gps"])}
+
+
 def run_pipeline(
     gps_time: float,
     detector: str = "H1",
     plot_path: str | None = None,
     subsolar_mode: bool = False,
+    injection_spec_path: str | None = None,
 ) -> PipelineResult:
     frange = FRANGE_SUBSOLAR if subsolar_mode else FRANGE
     chirp_threshold = CHIRP_SWEEP_THRESHOLD_SUBSOLAR if subsolar_mode else CHIRP_SWEEP_THRESHOLD
@@ -109,11 +129,14 @@ def run_pipeline(
     try:
         from gwpy.timeseries import TimeSeries
 
-        start = gps_time - WINDOW_SECONDS / 2
-        end = gps_time + WINDOW_SECONDS / 2
+        # W3: fetch a WIDER window for background estimation, analyze the central 4 s.
+        fetch_start = gps_time - FETCH_SECONDS / 2
+        fetch_end   = gps_time + FETCH_SECONDS / 2
+        start = gps_time - WINDOW_SECONDS / 2  # analyzed slice — unchanged
+        end   = gps_time + WINDOW_SECONDS / 2
 
-        print(f"  Downloading {detector} strain data: GPS {gps_time:.1f} {'[PBH MODE]' if subsolar_mode else ''}")
-        data = TimeSeries.fetch_open_data(detector, start, end, cache=True)
+        print(f"  Downloading {detector} strain data: GPS {gps_time:.1f} ({FETCH_SECONDS}s window) {'[PBH MODE]' if subsolar_mode else ''}")
+        data = TimeSeries.fetch_open_data(detector, fetch_start, fetch_end, cache=True)
 
         if data is None or len(data) == 0:
             return PipelineResult(
@@ -125,7 +148,21 @@ def run_pipeline(
                 error="No data returned from LIGO Open Science Center",
             )
 
-        print(f"  Computing Q-transform (frange={frange[0]}-{frange[1]} Hz)...")
+        # PHASE C: if this run is part of an injection campaign, add the
+        # pre-generated waveform into BOTH the primary and coincidence strains.
+        # Injection specs pair a 32 s H1+L1 noise window with matching per-detector
+        # arrays already scaled to a target network SNR; the "kind: noise" specs
+        # have zero-arrays and act as pure-noise controls.
+        injection_pack = None
+        if injection_spec_path is not None:
+            injection_pack = _load_injection_spec(injection_spec_path)
+            inj = injection_pack.get(f"inj_{detector}")
+            if inj is not None and len(inj) == len(data.value):
+                arr = np.array(data.value, dtype=np.float64) + inj
+                data = TimeSeries(arr, t0=data.t0, sample_rate=data.sample_rate,
+                                  name=data.name, channel=data.channel)
+
+        print(f"  Computing Q-transform (frange={frange[0]}-{frange[1]} Hz), analyzing central {WINDOW_SECONDS}s...")
         qgram = data.q_transform(qrange=QRANGE, frange=frange, outseg=(start, end))
 
         energy = np.array(qgram.value)
@@ -177,6 +214,7 @@ def run_pipeline(
                 primary_peak_freq=peak_freq,
                 primary_peak_time_offset=peak_time_offset,
                 frange=frange,
+                injection_pack=injection_pack,
             )
 
         return PipelineResult(
@@ -207,16 +245,32 @@ def run_pipeline(
         )
 
 
-def _detector_peak(detector: str, start: float, end: float, frange: tuple, gps_time: float):
+def _detector_peak(detector: str, start: float, end: float, frange: tuple, gps_time: float,
+                   injection_pack: dict | None = None):
     """
-    Download one detector's strain for the window and return
-    (energy_contrast, peak_freq_hz, peak_time_offset_s), or None if no data.
+    Download one detector's strain and return (energy_contrast, peak_freq_hz,
+    peak_time_offset_s), or None if no data.
+
+    W3: `start`/`end` here bound the ANALYZED slice (typically 4 s around gps_time);
+    the actual fetch pulls FETCH_SECONDS around gps_time so the PSD sees enough noise.
+    Phase C: if an injection_pack is given, its `inj_{detector}` array is summed into
+    the fetched strain BEFORE the Q-transform — same signal in both detectors, offset
+    by the correct light-travel delay already baked into the pre-generated arrays.
     """
     from gwpy.timeseries import TimeSeries
 
-    data = TimeSeries.fetch_open_data(detector, start, end, cache=True)
+    fetch_start = gps_time - FETCH_SECONDS / 2
+    fetch_end   = gps_time + FETCH_SECONDS / 2
+    data = TimeSeries.fetch_open_data(detector, fetch_start, fetch_end, cache=True)
     if data is None or len(data) == 0:
         return None
+
+    if injection_pack is not None:
+        inj = injection_pack.get(f"inj_{detector}")
+        if inj is not None and len(inj) == len(data.value):
+            arr = np.array(data.value, dtype=np.float64) + inj
+            data = TimeSeries(arr, t0=data.t0, sample_rate=data.sample_rate,
+                              name=data.name, channel=data.channel)
 
     qgram = data.q_transform(qrange=QRANGE, frange=frange, outseg=(start, end))
     energy = np.array(qgram.value)
@@ -258,6 +312,7 @@ def _check_coincidence(
     primary_peak_freq: float,
     primary_peak_time_offset: float,
     frange: tuple = FRANGE,
+    injection_pack: dict | None = None,
 ) -> CoincidenceResult:
     """
     Checks H1↔L1, Virgo (V1), and KAGRA (K1) at the same GPS time.
@@ -283,7 +338,7 @@ def _check_coincidence(
 
     try:
         print(f"  Coincidence check: downloading {second_detector}...")
-        peak = _detector_peak(second_detector, start, end, frange, gps_time)
+        peak = _detector_peak(second_detector, start, end, frange, gps_time, injection_pack)
         if peak is not None:
             second_contrast, second_peak_freq, second_peak_time_offset = peak
             freq_agreement, dt_peak, dt_agreement, coincident = _coincidence_tests(
@@ -307,7 +362,7 @@ def _check_coincidence(
 
     try:
         print(f"  Coincidence check: downloading V1 (Virgo)...")
-        peak = _detector_peak("V1", start, end, frange, gps_time)
+        peak = _detector_peak("V1", start, end, frange, gps_time, injection_pack)
         if peak is not None:
             virgo_checked = True
             virgo_contrast, virgo_peak_freq, v_peak_time_offset = peak
@@ -335,7 +390,7 @@ def _check_coincidence(
 
     try:
         print(f"  Coincidence check: downloading K1 (KAGRA)...")
-        peak = _detector_peak("K1", start, end, frange, gps_time)
+        peak = _detector_peak("K1", start, end, frange, gps_time, injection_pack)
         if peak is not None:
             kagra_checked = True
             kagra_contrast, kagra_peak_freq, k_peak_time_offset = peak

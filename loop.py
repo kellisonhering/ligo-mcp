@@ -34,13 +34,16 @@ _load_openclaw_env()
 PIPELINE_VERSION = "1.2.0"
 PLANNER_PROMPT_VERSION = "1.2.0"   # bump when SYSTEM_PROMPT in planner.py changes
 VISION_PROMPT_VERSION = "1.0.0"    # bump when VISION_SYSTEM_PROMPT in planner.py changes
-DETECTION_ALGORITHM_VERSION = "2.0.0"  # bump when pipeline.py signal detection logic changes
+DETECTION_ALGORITHM_VERSION = "2.1.0"  # bump when pipeline.py signal detection logic changes
 # 2.0.0 (July 10, 2026): W1 — "snr" renamed to "energy_contrast" (it was never
 # matched-filter SNR); confidence_score rebuilt from discriminators (chirp,
 # time-of-flight coincidence, DQ) instead of loudness. W2 — coincidence now
 # requires arrival-time agreement within light travel between sites.
-# Records from this version on are schema_version 3; confidence_score is NOT
-# comparable across the v2→v3 boundary.
+# 2.1.0 (July 11-12, 2026): W3 — fetch a 32 s window and analyze the central 4 s
+# via q_transform outseg, so PSD/whitening see enough real noise to be stable
+# (4 s of data was both signal window and background estimate). Metrics still
+# describe the same 4 s slice; energy_contrast values shift slightly vs 2.0.0
+# because the background floor changes — expected, documented, still schema_version 3.
 
 from pipeline import run_pipeline, compute_confidence_score
 from catalog import check_catalog, SUBSOLAR_CANDIDATES
@@ -104,12 +107,116 @@ PBH_BENCHMARK_TARGETS = [
 ]
 
 
+CAMPAIGN_FILE = os.path.join(DATA_DIR, "campaign_2026_07.jsonl")
+CAMPAIGN_POOL_DIR = os.path.expanduser("~/experiment-data/ligo/campaign/pool")
+CAMPAIGN_INJECTION_FRACTION = 0.50  # per §7.5 pacing: interleave 1/hour @ ~50%
+
+# Keys that are ALLOWED to appear in the planner summary dict. Anything else
+# (in particular anything from the `injection` metadata) is a blinding violation.
+# Enforced as an assertion at the end of run_experiment before the LLM call.
+_ALLOWED_SUMMARY_KEY_PREFIXES = (
+    "gps_time", "detector", "subsolar_mode",
+    "signal_detected", "peak_frequency_hz", "peak_time_offset_s",
+    "energy_contrast", "confidence_score", "classification_hint",
+    "freq_early_hz", "freq_late_hz", "freq_sweep_hz_per_s", "chirp_like",
+    "coincidence_", "coincident", "virgo_", "triple_coincident", "kagra_", "quad_coincident",
+    "fermi_", "dq_", "snews_", "icecube_",
+    "known_event_match", "event_name", "event_type", "time_offset_s",
+    "observing_run", "is_subsolar", "is_pbh_candidate",
+    "vision_",
+)
+
+
+def _assert_blind(summary: dict) -> None:
+    """Refuse to send anything with an injection-shaped key to the planner."""
+    for key in summary.keys():
+        if not any(key.startswith(pfx) for pfx in _ALLOWED_SUMMARY_KEY_PREFIXES):
+            raise RuntimeError(
+                f"BLINDING VIOLATION: planner summary contains unexpected key {key!r}. "
+                f"Injection metadata must never enter experiment_summary."
+            )
+
+
+def _campaign_completed_spec_ids() -> set[str]:
+    """Which pool specs already have a campaign record? Prevents re-running the same one."""
+    done = set()
+    if not os.path.exists(CAMPAIGN_FILE):
+        return done
+    with open(CAMPAIGN_FILE) as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+                sid = (rec.get("injection") or {}).get("spec_id")
+                if sid:
+                    done.add(sid)
+            except Exception:
+                continue
+    return done
+
+
+def _next_campaign_target() -> dict | None:
+    """
+    Pick the next unrun campaign spec, or None if the pool is exhausted / missing.
+    Returns a target dict shaped like normal survey targets, plus the spec path
+    and the gps_time drawn from the spec (so pipeline aligns to the pre-generated
+    noise/injection arrays).
+    """
+    if not os.path.isdir(CAMPAIGN_POOL_DIR):
+        return None
+    done = _campaign_completed_spec_ids()
+    for name in sorted(os.listdir(CAMPAIGN_POOL_DIR)):
+        if not name.endswith(".npz"):
+            continue
+        spec_id = name.replace(".npz", "")
+        if spec_id in done:
+            continue
+        spec_path = os.path.join(CAMPAIGN_POOL_DIR, name)
+        # gps_time is stored in the .npz itself; open it to get it (cheap: one field)
+        try:
+            import numpy as _np
+            gps = float(_np.load(spec_path)["gps"])
+        except Exception:
+            continue
+        return {
+            "gps_time": gps,
+            "detector": "H1",
+            "mode": "campaign",
+            "injection_spec_path": spec_path,
+            "spec_id": spec_id,
+        }
+    return None
+
+
+def physics_only_decision(summary: dict) -> tuple[str, bool]:
+    """
+    §7.5 rule 8 — the deterministic-rule baseline decision, computed from the same
+    summary the planner sees. Returns (decision, caught) where `caught` uses the
+    same PRIMARY rule as the injection grading (§7.5 rule 4):
+        caught = chirp_like AND coincident AND dt_agreement AND !dq_cat1_active
+    """
+    caught = bool(
+        summary.get("chirp_like") and summary.get("coincident")
+        and (summary.get("coincidence_dt_agreement") is True)
+        and not summary.get("dq_cat1_active")
+    )
+    if summary.get("known_event_match") and caught:
+        decision = "benchmark_validated"
+    elif caught:
+        decision = "candidate_for_human_review"
+    elif summary.get("signal_detected"):
+        decision = "glitch_candidate"
+    else:
+        decision = "archive"
+    return decision, caught
+
+
 def run_experiment(
     gps_time: float,
     detector: str = "H1",
     mode: str = "survey",
     subsolar_mode: bool = False,
     provenance: dict | None = None,
+    injection_spec_path: str | None = None,
 ) -> dict:
     experiment_id = f"ligo_{datetime.now(timezone.utc).strftime('%Y_%m_%d')}_{uuid.uuid4().hex[:6]}"
     created_at = datetime.now(timezone.utc).isoformat()
@@ -124,6 +231,7 @@ def run_experiment(
         detector=detector,
         plot_path=plot_path,
         subsolar_mode=subsolar_mode,
+        injection_spec_path=injection_spec_path,
     )
     print(f"[{experiment_id}] Pipeline complete — detected={pipeline_result.signal_detected} contrast={pipeline_result.energy_contrast}")
 
@@ -258,8 +366,19 @@ def run_experiment(
             experiment_summary["vision_score_modifier"] = vision_result.score_modifier
             experiment_summary["vision_reasoning"] = vision_result.reasoning
 
+        # Blinding boundary (§7.5): fail loudly if any key that looks like
+        # injection metadata has leaked into what the planner will see.
+        _assert_blind(experiment_summary)
+
         planner_result = run_planner(experiment_summary)
         print(f"[{experiment_id}] LLM decision: {planner_result.decision} (score={planner_result.interesting_score})")
+
+    # §7.5 rule 8 — physics-only baseline decision, from the same summary the LLM saw.
+    # Runs in both branches (data-unavailable → archive/False by construction).
+    if data_unavailable:
+        baseline_decision, baseline_caught = "archive", False
+    else:
+        baseline_decision, baseline_caught = physics_only_decision(experiment_summary)
 
     # Escalate SNEWS and IceCube coincidences regardless of LLM score
     if snews_result.alert_found and planner_result.decision not in CANDIDATE_DECISIONS:
@@ -339,8 +458,23 @@ def run_experiment(
             "human_review_required": planner_result.human_review_required,
             "planner_error": planner_result.error,
         },
+        # §7.5 rule 8 — physics-only rules run in parallel with the LLM. Compare
+        # baseline_caught vs the LLM's decision (and vs the injection truth at
+        # scoring time) to measure how much the LLM adds beyond the rules.
+        "physics_baseline": {
+            "decision": baseline_decision,
+            "caught": baseline_caught,
+        },
+        # PHASE C: minimal injection provenance — spec_id + injected flag only.
+        # Full truth (masses, SNR, sky position) lives ONLY in campaign_truth.jsonl
+        # and is not read until the campaign is complete (§7.5 blinding statement).
+        "injection": {
+            "injected": injection_spec_path is not None,
+            "spec_id": (os.path.basename(injection_spec_path).replace(".npz", "")
+                        if injection_spec_path else None),
+        },
         "mode": mode,
-        "schema_version": 3,  # v3 (July 10, 2026): snr→energy_contrast, discriminator confidence, dt fields
+        "schema_version": 4,  # v4 (July 12, 2026): W3 32s fetch, injection field, physics baseline
         "target_provenance": provenance or {},
         "wall_seconds": round(time.perf_counter() - t_start, 2),
         "plot_path": pipeline_result.plot_path,
@@ -357,7 +491,9 @@ def run_experiment(
         },
     }
 
-    _append_experiment(experiment)
+    # Campaign runs land in the separate campaign file so scoring/analysis is clean
+    # and never contaminates the ongoing survey dataset (§7.5 rule 1).
+    _append_experiment(experiment, campaign=(mode == "campaign"))
 
     if planner_result.decision in CANDIDATE_DECISIONS:
         report_path = generate_candidate_report(experiment)
@@ -396,7 +532,18 @@ def run_loop(
             print(f"Reached max_experiments={max_experiments}. Stopping.")
             break
 
-        if count > 0 and count % BENCHMARK_INTERVAL == 0:
+        # §7.5 CAMPAIGN — before drawing a survey target, ~50% of iterations
+        # use the next un-run campaign spec instead. Benchmarks still fire on
+        # their normal cadence and campaign runs don't count as a "requeue".
+        campaign_pick = None
+        do_benchmark = count > 0 and count % BENCHMARK_INTERVAL == 0
+        if not do_benchmark and random.random() < CAMPAIGN_INJECTION_FRACTION:
+            campaign_pick = _next_campaign_target()
+
+        if campaign_pick is not None:
+            target = campaign_pick
+            print(f"[campaign] Running spec {target['spec_id']} at GPS {target['gps_time']:.1f}")
+        elif do_benchmark:
             target = benchmark_cycle[count // BENCHMARK_INTERVAL % len(benchmark_cycle)]
             print(f"[benchmark] Inserting known event {target.get('label')} GPS {target['gps_time']}")
         else:
@@ -429,6 +576,7 @@ def run_loop(
                 mode=target.get("mode", "survey"),
                 subsolar_mode=target.get("subsolar_mode", False),
                 provenance=dict(target),
+                injection_spec_path=target.get("injection_spec_path"),
             )
             history.append(experiment)
             if len(history) > 20:
@@ -437,7 +585,10 @@ def run_loop(
 
             decision = experiment.get("llm_review", {}).get("decision")
             requeue_count = target.get("requeue_count", 0)
-            if decision in REQUEUE_DECISIONS and requeue_count < MAX_REQUEUE_ATTEMPTS:
+            # Campaign runs are pre-registered to the pool spec; never requeue them.
+            if target.get("mode") == "campaign":
+                pass
+            elif decision in REQUEUE_DECISIONS and requeue_count < MAX_REQUEUE_ATTEMPTS:
                 other_detector = "L1" if target.get("detector", "H1") == "H1" else "H1"
                 requeue_target = {
                     "gps_time": target["gps_time"],
@@ -731,9 +882,11 @@ def _fetch_survey_windows(limit: int = 50, detector: str = "H1") -> list[dict]:
     return _fetch_gracedb_triggers(limit=limit, detector=detector)
 
 
-def _append_experiment(experiment: dict) -> None:
-    os.makedirs(os.path.dirname(EXPERIMENTS_FILE), exist_ok=True)
-    with open(EXPERIMENTS_FILE, "a") as f:
+def _append_experiment(experiment: dict, campaign: bool = False) -> None:
+    """Write a record to the survey dataset OR the campaign dataset (§7.5 rule 1)."""
+    target = CAMPAIGN_FILE if campaign else EXPERIMENTS_FILE
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "a") as f:
         f.write(json.dumps(experiment) + "\n")
 
 
