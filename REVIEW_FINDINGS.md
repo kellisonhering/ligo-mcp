@@ -207,13 +207,15 @@ Kellison wants Fable to do the actual build in a future usage window AND to give
 **NEXT (needs go-ahead — touches the live pipeline):** W3 (32 s fetch, central 4 s analysis) → Phase C (injection param through `run_pipeline`/`run_experiment`, `injection` record field, schema_version 4, blinding boundary enforced) → A1 claim freeze + pre-registration (SNR bins, masses 20–80 M☉ total, N≥200+100, detection-claim rule) → Phase D batch campaign → Phase E analysis with both yardsticks.
 
 ### §7.5 — PRE-REGISTRATION: injection campaign grading rules
-**STATUS: DRAFT — AWAITING KELLISON'S LOCK. Written July 10, 2026 BEFORE any campaign run. Once locked, these rules do not change; results are reported under these rules no matter how they look. (Recommended at lock time: `git init` the ligo-mcp folder and commit this file — the commit timestamp is the credential.)**
+**STATUS: 🔒 LOCKED by Kellison on 2026-07-11. These rules do not change from this point forward; results are reported under them no matter how they look. Git commit of this file at lock time (`ligo-mcp` repo, commit hash appended below) is the credential — the timestamp on that commit is what makes this pre-registration real. Any change to §7.5 after lock must appear as a NEW section (e.g. §7.5b — amendment), never as an in-place edit, and must be committed with a clear reason before any further scored runs.**
+
+**PACING (Kellison's choice at lock time):** the campaign runs **interleaved with the regular survey loop at ~1 experiment per hour**, NOT as a dedicated batch. Rationale: spreads cost gradually (matches Kellison's budget pacing policy, [[project-pace-spending]]); no scientific downside (300 experiments is 300 experiments regardless of wall-clock rate); requires no new scheduler infrastructure. Approximate wall-clock horizon at 1/hour with ~50% injection fraction: ~25 days for 300 runs total.
 
 **THE TEST:** hide synthetic gravitational-wave signals in real detector noise; measure how many the pipeline finds, how often it cries wolf on nothing, and whether its confidence numbers mean what they say.
 
 **1. The roster (what runs):**
-- 300 runs total, as a dedicated batch (separate process; the hourly survey loop keeps running untouched).
-- **200 injections** + **100 pure-noise controls** (no signal — the lie-detector set), shuffled randomly.
+- 300 runs total, mixed into the ongoing hourly survey loop at ~50% injection rate (see PACING above).
+- **200 injections** + **100 pure-noise controls** (no signal — the lie-detector set), shuffled randomly across the schedule.
 - Campaign records go to a SEPARATE file (`~/experiment-data/ligo/campaign_2026_07.jsonl`), keeping the survey dataset clean and avoiding concurrent-write collisions with the live loop.
 - Raw 32 s strain windows (H1+L1) saved per run (~600 MB total) — enables the matched-filter yardstick and any future reanalysis.
 
@@ -248,6 +250,8 @@ Kellison wants Fable to do the actual build in a future usage window AND to give
 - Phase C lands (injection pathway, `injection` record field carrying `{injected, spec_id}` only — full truth parameters live ONLY in `campaign_truth.jsonl`, not read until scoring; schema_version 4; the planner summary NEVER carries any injection field).
 - Both validated by: one GW150914 benchmark run + one loud test injection + one noise control, checked end-to-end.
 - Versions + prompts frozen at campaign start and stamped into every record (existing versions block).
+
+**8. Physics-only baseline logged per run (locked into scope — panel-flagged as highest-value addition):** every campaign record ALSO carries the decision a deterministic-rule system would have made on the same summary (`baseline_decision`, `baseline_caught`) — no LLM in the loop. Grading rules 4 and 5 are applied identically to this arm. Yields the "does the LLM add anything over rules?" comparison as a free byproduct — the highest information-per-dollar experiment in the campaign per the July 2026 strategy review. Kellison confirmed 2026-07-11.
 
 **Blinding statement:** the planner LLM is structurally blind (stateless, sees only the summary, which carries no injection information). The humans (Kellison + the AI assistant) agree not to compare outcomes against `campaign_truth.jsonl` until all 300 runs are complete.
 
