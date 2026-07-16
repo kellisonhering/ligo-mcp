@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 *.log
 experiment-data/
+.pytest_cache/

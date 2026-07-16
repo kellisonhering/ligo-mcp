@@ -1,5 +1,8 @@
 # LIGO Pipeline — Implementation Plan (approved in phases July 8, 2026)
 
+> **CURRENT STATUS (2026-07-16), appended — historical phase notes below are left as-written.**
+> Since the notes below were written, the following shipped: **W3** (32 s fetch / central 4 s analysis, `DETECTION_ALGORITHM_VERSION 2.1.0`) and the full **injection campaign** (Phase C wiring, 300-spec pool = 200 injections + 100 noise controls, physics-only baseline per §7.5 rule 8). The campaign is **live** at a 30-minute interval (§7.5b). Truth artifacts are **sealed** (`campaign_seal/`). A physics-baseline rule bug was corrected under erratum **§7.5c** (baseline is recomputed uniformly at scoring). A `tests/` pytest suite and a `tools/audit_campaign.py` local audit now exist (the `tests/` directory referenced in the historical "Testing" note below is no longer aspirational). Still not done: O4 cutoff raise, B3 PBH fixes, F10 benchmark matrix, F11, Gravity Spy, dashboards, errata backfill for pre-campaign records.
+
 Companion to `REVIEW_FINDINGS.md` (the review) — this is the fix plan. Fixes are grouped F1–F12. Phase-1 batch (**F1, F2, F3, F4, F5, F9**) approved for implementation July 8, 2026. Phase-2 batch (**F6=W1, F7=W2, F8=W5, IceCube population**) approved and implemented July 10, 2026.
 
 ## STATUS: Phase-1 DEPLOYED (July 9) · Phase-2 DEPLOYED (July 10)

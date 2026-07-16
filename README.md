@@ -67,7 +67,10 @@ The planner never sees: raw strain data, injection ground truth, or any field na
 | [`injections.py`](injections.py) | Applies an injection to a real strain window at runtime |
 | [`server.py`](server.py) | FastMCP server exposing the pipeline as tools (integrates with the OpenClaw gateway) |
 | [`reporter.py`](reporter.py) | Turns raw records into human-readable summaries and daily reports |
-| [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) | The design review (July 8, 2026), the pre-registration (§7.5), and status notes |
+| [`tests/`](tests/) | Public pytest suite — grading rule, blinding, decision mapping (no private data needed) |
+| [`tools/audit_campaign.py`](tools/audit_campaign.py) | Local audit — pool contiguity, no-dup execution, seal-manifest verification |
+| [`campaign_seal/`](campaign_seal/) | SHA-256 manifest + dated note sealing the truth artifacts (hashes only, no data) |
+| [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) | The design review (July 8, 2026), the pre-registration (§7.5), amendments (§7.5b/c), and status notes |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Fix batches (F1–F12) approved in phases, with completion status |
 
 ## Running it
@@ -102,13 +105,21 @@ This repo is the engineering side of a broader project on **evaluation harnesses
 - **Pre-registration as a QA discipline** — locking the grading rules before seeing results, using git as the tamper-evident timestamp.
 - **Blinding boundaries in a codebase** — injection truth is architecturally isolated from the planner so the LLM can't accidentally see the answer key.
 - **Silent-failure hunting** — the July 2026 review turned up four checks that were failing silently and reporting fake pass results; the canary suite in `canary.py` exists so that class of bug can't come back.
-- **Version stamping** — every record carries `schema_version`, `PIPELINE_VERSION`, `DETECTION_ALGORITHM_VERSION`, and prompt version hashes, so records from before and after a change can be re-scored coherently.
+- **Version stamping** — every record carries `schema_version`, `PIPELINE_VERSION`, `DETECTION_ALGORITHM_VERSION`, `baseline_rule_version`, and prompt version hashes, so records from before and after a change can be re-scored coherently.
+
+## Blinding: two distinct mechanisms
+
+The pipeline's blinding rests on two *different* guarantees, which the pre-registration keeps separate:
+
+- **Structural (planner)** — architecturally enforced. The planner LLM is stateless and receives only a numerical summary; `_assert_blind()` in [`loop.py`](loop.py) raises before any LLM call if an injection-shaped key reaches the summary. This cannot be violated by human discipline lapses.
+- **Procedural (human)** — an agreement not to compare outcomes against the sealed truth until all 300 runs finish. This is honor-system, but now *verifiable*: the truth artifacts are hashed in [`campaign_seal/SHA256SUMS.txt`](campaign_seal/SHA256SUMS.txt) and set read-only, so any post-hoc alteration is detectable.
 
 ## Status (July 2026)
 
-- **Live loop:** running as `com.kellison.ligo-loop`, one experiment per hour.
-- **Injection campaign:** live (interleaved with the survey), pool generation in progress toward 300 specs.
-- **Pre-registration:** locked, pushed publicly (see commit `f335294003eb`).
+- **Live loop:** running as `com.kellison.ligo-loop`, one experiment every 30 minutes (`SLEEP_BETWEEN_EXPERIMENTS = 1800`; see §7.5b).
+- **Injection campaign:** live (interleaved with the survey). Pool complete — **300 contiguous specs** (200 injections + 100 noise controls).
+- **Pre-registration:** locked, pushed publicly (see commit `f335294003eb`); pacing amendment §7.5b and implementation erratum §7.5c added, both dated.
+- **Tests:** public unit tests in [`tests/`](tests/) (grading rule, blinding, decision mapping); a local [`tools/audit_campaign.py`](tools/audit_campaign.py) checks pool contiguity, no-duplicate execution, and seal-manifest integrity without revealing truth.
 - **Results:** will not be reported until all 300 campaign runs complete. Blinding is enforced.
 
 ## Data attribution
