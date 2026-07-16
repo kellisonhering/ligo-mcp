@@ -35,6 +35,15 @@ PIPELINE_VERSION = "1.2.0"
 PLANNER_PROMPT_VERSION = "1.2.0"   # bump when SYSTEM_PROMPT in planner.py changes
 VISION_PROMPT_VERSION = "1.0.0"    # bump when VISION_SYSTEM_PROMPT in planner.py changes
 DETECTION_ALGORITHM_VERSION = "2.1.0"  # bump when pipeline.py signal detection logic changes
+# Version of the physics-only baseline `caught` rule (§7.5 rule 8 / rule 4). Kept
+# SEPARATE from DETECTION_ALGORITHM_VERSION on purpose: signal processing is
+# unchanged; only the deterministic baseline rule changed.
+#   1 = (chirp_like AND coincident AND dt_agreement AND !dq_cat1_active) — BUGGED,
+#       non-conforming; used for campaign records before 2026-07-16.
+#   2 = (chirp_like OR coincident) — the locked §7.5 rule 4, verbatim. See §7.5c.
+# Final scoring recomputes `caught` uniformly under rule 2 for ALL records; this
+# field just marks which rule a record was WRITTEN under.
+BASELINE_RULE_VERSION = 2
 # 2.0.0 (July 10, 2026): W1 — "snr" renamed to "energy_contrast" (it was never
 # matched-filter SNR); confidence_score rebuilt from discriminators (chirp,
 # time-of-flight coincidence, DQ) instead of loudness. W2 — coincidence now
@@ -191,14 +200,20 @@ def physics_only_decision(summary: dict) -> tuple[str, bool]:
     """
     §7.5 rule 8 — the deterministic-rule baseline decision, computed from the same
     summary the planner sees. Returns (decision, caught) where `caught` uses the
-    same PRIMARY rule as the injection grading (§7.5 rule 4):
-        caught = chirp_like AND coincident AND dt_agreement AND !dq_cat1_active
+    LOCKED PRIMARY rule from §7.5 rule 4, verbatim:
+        caught = chirp_like OR coincident
+    (`coincident` already incorporates the arrival-time / dt-agreement test — see
+    the pipeline coincidence definition — so it is not ANDed separately here.)
+
+    ERRATUM 2026-07-16 (§7.5c): earlier records were computed with a stricter,
+    non-conforming rule (chirp_like AND coincident AND dt_agreement AND
+    !dq_cat1_active). That was an implementation bug, not a rule change. The raw
+    fields (chirp_like, coincident) are stored in every record, so final scoring
+    RECOMPUTES `caught` uniformly for all 300 records under this OR rule — earlier
+    records stay valid and append-only; only the stored convenience boolean was
+    ever wrong. See BASELINE_RULE_VERSION below.
     """
-    caught = bool(
-        summary.get("chirp_like") and summary.get("coincident")
-        and (summary.get("coincidence_dt_agreement") is True)
-        and not summary.get("dq_cat1_active")
-    )
+    caught = bool(summary.get("chirp_like")) or bool(summary.get("coincident"))
     if summary.get("known_event_match") and caught:
         decision = "benchmark_validated"
     elif caught:
@@ -464,10 +479,20 @@ def run_experiment(
         "physics_baseline": {
             "decision": baseline_decision,
             "caught": baseline_caught,
+            "baseline_rule_version": BASELINE_RULE_VERSION,
         },
         # PHASE C: minimal injection provenance — spec_id + injected flag only.
         # Full truth (masses, SNR, sky position) lives ONLY in campaign_truth.jsonl
         # and is not read until the campaign is complete (§7.5 blinding statement).
+        #
+        # NOTE (§7.5c, 2026-07-16): `injected` means "a campaign pool spec was
+        # APPLIED to this run", NOT "a synthetic signal is present". Noise-only
+        # control specs also carry a spec_path (their .npz just holds a zero
+        # injection array), so `injected` is True for BOTH injections and controls
+        # and thus does NOT distinguish them — which is why it is not a blinding
+        # leak. Whether a run truly contains a signal comes ONLY from the sealed
+        # campaign_truth.jsonl at scoring time, never from this field. Kept as-is
+        # (not renamed) to avoid a schema change mid-campaign; old records unchanged.
         "injection": {
             "injected": injection_spec_path is not None,
             "spec_id": (os.path.basename(injection_spec_path).replace(".npz", "")

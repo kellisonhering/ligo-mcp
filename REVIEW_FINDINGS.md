@@ -260,6 +260,44 @@ Kellison wants Fable to do the actual build in a future usage window AND to give
 **Reason:** observed real cadence was ~1 run every 2.9 h (wall-clock time for multi-detector data fetch + two LLM calls stacks on top of the sleep), projecting ~4 months to complete 300 runs. Halving the sleep shortens the wall-clock horizon to roughly 2 months. Kellison requested the change on 2026-07-16.
 **Scope of this amendment:** wall-clock pacing ONLY. This changes nothing about the grading rules (§7.5 rules 4–6), the signal population (§7.5 rule 2), the noise-window selection (§7.5 rule 3), blinding, or the physics-only baseline. Pacing was pre-declared scientifically neutral in the §7.5 PACING note ("no scientific downside; 300 experiments is 300 experiments regardless of wall-clock rate"), so this amendment does not affect any scored outcome. No campaign records already written are invalidated; runs before and after this change are graded identically.
 
+### §7.5c — ERRATUM (implementation bugs, not rule changes), 2026-07-16
+This section documents two places where the **code diverged from, or under-described, the locked §7.5 rules**. §7.5's rules themselves are unchanged and remain correct; the code and docs are being brought into conformance with them. Raised in an external code review on 2026-07-16.
+
+**Erratum 1 — physics-only baseline used the wrong `caught` rule.**
+`physics_only_decision()` in `loop.py` computed the baseline `caught` as
+`chirp_like AND coincident AND dt_agreement AND !dq_cat1_active`, but §7.5 rule 4
+locks the PRIMARY rule as `chirp_like == true OR coincident == true`. This was an
+implementation bug (the function's own docstring wrongly claimed it matched rule 4).
+- **Scope:** affects ONLY the stored convenience boolean `physics_baseline.caught`
+  in campaign records written before this fix. It does **not** affect the primary
+  injection-efficiency grading, which is computed at scoring time from raw fields,
+  nor any raw measurement.
+- **Remedy:** the raw discriminators (`chirp_like`, `coincident`) are stored in
+  every record, so **final scoring recomputes `caught` uniformly for all 300
+  records under the locked OR rule.** Earlier records therefore stay valid and the
+  dataset stays append-only — nothing is edited or discarded.
+- **Fix + versioning:** `physics_only_decision()` now computes
+  `bool(chirp_like) or bool(coincident)`, verbatim §7.5 rule 4. A new
+  `baseline_rule_version` field (1 = old buggy rule, 2 = locked OR rule) is stamped
+  into each record's `physics_baseline` block so the write-time rule is
+  self-documenting. `DETECTION_ALGORITHM_VERSION` is deliberately **not** bumped:
+  signal processing is unchanged; only the deterministic baseline rule changed.
+
+**Erratum 2 — the `injection.injected` field is misleadingly named.**
+`injected` is set to `injection_spec_path is not None`, which is True for **every**
+campaign run — including noise-only controls, whose pool spec carries a zero
+injection array. So `injected` means "a campaign pool spec was applied," NOT "a
+synthetic signal is present."
+- **Not a blinding leak:** because it is uniformly True across both injections and
+  controls, it does not distinguish them. It separates campaign runs from ordinary
+  survey runs, nothing more.
+- **Handling:** the field is **kept as-is, not renamed**, to avoid a schema change
+  mid-campaign; old records are not rewritten. Its true meaning is documented here
+  and in a `loop.py` comment. Whether a run truly contains a signal is determined
+  ONLY by the sealed `campaign_truth.jsonl` at scoring time.
+
+**Artifact sealing (related hardening, same date).** The truth set (`campaign_truth.jsonl`), `pool_index.json`, `pool_gen.log`, and all 300 `pool/*.npz` were set filesystem read-only and hashed into `campaign_seal/SHA256SUMS.txt` (committed, off-repo data itself not committed). Sealing occurred after 7 campaign records had been collected; disclosed in `campaign_seal/SEAL_NOTE.md`. This makes the §7.5 blinding verifiable rather than honor-system.
+
 ## §8 — Expansion ideas (ranked) + what's NOT worth it
 
 1. Injection engine + blind challenges (§7).
