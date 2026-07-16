@@ -66,7 +66,7 @@ PLOTS_DIR = os.path.join(DATA_DIR, "plots")
 
 CANDIDATE_DECISIONS = {"follow_up", "candidate_for_human_review"}
 BENCHMARK_INTERVAL = 5
-SLEEP_BETWEEN_EXPERIMENTS = 3600  # 1 hour — 24 experiments per day (temporarily faster to make up lost time)
+SLEEP_BETWEEN_EXPERIMENTS = 1800  # 30 min — halved from 3600 on 2026-07-16 to shorten the campaign wall-clock; pacing is scientifically neutral per §7.5 (see §7.5b amendment)
 REQUEUE_DECISIONS = {"rerun", "follow_up"}
 MAX_REQUEUE_ATTEMPTS = 3
 

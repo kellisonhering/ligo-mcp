@@ -255,6 +255,11 @@ Kellison wants Fable to do the actual build in a future usage window AND to give
 
 **Blinding statement:** the planner LLM is structurally blind (stateless, sees only the summary, which carries no injection information). The humans (Kellison + the AI assistant) agree not to compare outcomes against `campaign_truth.jsonl` until all 300 runs are complete.
 
+### §7.5b — AMENDMENT (pacing only), 2026-07-16
+**Change:** `SLEEP_BETWEEN_EXPERIMENTS` reduced from 3600 s (1/hour) to 1800 s (2/hour) in `loop.py`.
+**Reason:** observed real cadence was ~1 run every 2.9 h (wall-clock time for multi-detector data fetch + two LLM calls stacks on top of the sleep), projecting ~4 months to complete 300 runs. Halving the sleep shortens the wall-clock horizon to roughly 2 months. Kellison requested the change on 2026-07-16.
+**Scope of this amendment:** wall-clock pacing ONLY. This changes nothing about the grading rules (§7.5 rules 4–6), the signal population (§7.5 rule 2), the noise-window selection (§7.5 rule 3), blinding, or the physics-only baseline. Pacing was pre-declared scientifically neutral in the §7.5 PACING note ("no scientific downside; 300 experiments is 300 experiments regardless of wall-clock rate"), so this amendment does not affect any scored outcome. No campaign records already written are invalidated; runs before and after this change are graded identically.
+
 ## §8 — Expansion ideas (ranked) + what's NOT worth it
 
 1. Injection engine + blind challenges (§7).
