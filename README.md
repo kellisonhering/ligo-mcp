@@ -34,7 +34,7 @@ The evaluation harness runs 300 experiments interleaved with the normal survey l
 - **200 injections** — synthetic binary-black-hole waveforms injected into real O3 detector noise. Signal strength stratified: 20% invisible (SNR 4–6), 60% marginal (6–16), 20% obvious (16–24).
 - **100 noise-only controls** — no signal injected, so any "detection" here is a false alarm.
 
-The pipeline is blind to which is which. All ground truth (injection parameters, strengths, sky positions) is written to a separate `campaign_truth.jsonl` file that isn't read until scoring, after all 300 runs are complete.
+The pipeline is blind to which is which. Ground truth (injection parameters, strengths, sky positions) is isolated in sealed answer-key files that are not read by the pipeline or planner. The original answer key remains unopened for scoring; the §7.5d replacement generator read it internally without displaying values so it could preserve the frozen assignments and signal parameters.
 
 Every run also logs the decision a **physics-only baseline** (no LLM) would have made on the same detector summary, so the same grading rules produce a "does the LLM add anything?" comparison as a free byproduct.
 
@@ -49,7 +49,7 @@ The LLM planner never sees raw detector strain. On each run it receives:
 
 The planner returns a structured decision from an enforced whitelist — `archive`, `benchmark_validated`, `glitch_candidate`, `rerun`, `follow_up`, `candidate_for_human_review` — plus a numeric `interesting_score` clamped to `[0, 1]`. Any decision outside the whitelist is rewritten to `archive`. Parse failures and API exceptions default to `archive` with `interesting_score = 0.0`.
 
-The planner never sees: raw strain data, injection ground truth, or any field named `injection`. Blinding is enforced at the code level by `_assert_blind()` in [`loop.py`](loop.py), which checks the summary against an allowlist of ~30 permitted key prefixes and raises `RuntimeError` before the LLM call if anything unexpected appears. Injection ground truth (masses, sky position, achieved SNR) lives only in `campaign_truth.jsonl`, which is written by [`injection_pool_generator.py`](injection_pool_generator.py) and read by no other file in the repository.
+The planner never sees: raw strain data, injection ground truth, or any field named `injection`. Blinding is enforced at the code level by `_assert_blind()` in [`loop.py`](loop.py), which checks the summary against an allowlist of ~30 permitted key prefixes and raises `RuntimeError` before the LLM call if anything unexpected appears. Injection ground truth lives only in the separately sealed original and replacement answer keys. The §7.5d repair script is the sole pre-scoring reader: it uses the original key internally to preserve assignments and parameters, never displays them, and never reads campaign outcomes.
 
 ## Repository layout
 
@@ -63,13 +63,16 @@ The planner never sees: raw strain data, injection ground truth, or any field na
 | [`crossmatch.py`](crossmatch.py) | External catalog checks: Fermi GBM, IceCube, data quality, SNEWS |
 | [`catalog.py`](catalog.py) | GWTC event lookup + subsolar candidate lists |
 | [`canary.py`](canary.py) | Startup sanity checks — verifies every check works on a known-answer input |
-| [`injection_pool_generator.py`](injection_pool_generator.py) | Pre-generates the 300 injection/noise specs used by the campaign |
+| [`injection_pool_generator.py`](injection_pool_generator.py) | Pre-generates injection/noise specs with strict numerical checks |
+| [`campaign_quality.py`](campaign_quality.py) | Shared numerical-validity gate and frozen exclusion-list loader |
+| [`tools/generate_campaign_replacements.py`](tools/generate_campaign_replacements.py) | Generates §7.5d replacements without printing sealed truth |
 | [`injections.py`](injections.py) | Applies an injection to a real strain window at runtime |
 | [`server.py`](server.py) | FastMCP server exposing the pipeline as tools (integrates with the OpenClaw gateway) |
 | [`reporter.py`](reporter.py) | Turns raw records into human-readable summaries and daily reports |
 | [`tests/`](tests/) | Public pytest suite — grading rule, blinding, decision mapping (no private data needed) |
 | [`tools/audit_campaign.py`](tools/audit_campaign.py) | Local audit — pool contiguity, no-dup execution, seal-manifest verification |
 | [`campaign_seal/`](campaign_seal/) | SHA-256 manifest + dated note sealing the truth artifacts (hashes only, no data) |
+| [`campaign_replacement_seal/`](campaign_replacement_seal/) | Independent SHA-256 seal for the 52 §7.5d replacements |
 | [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) | The design review (July 8, 2026), the pre-registration (§7.5), amendments (§7.5b/c), and status notes |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Fix batches (F1–F12) approved in phases, with completion status |
 
@@ -116,9 +119,9 @@ The pipeline's blinding rests on two *different* guarantees, which the pre-regis
 
 ## Status (July 2026)
 
-- **Live loop:** running as `com.kellison.ligo-loop`, one experiment every 30 minutes (`SLEEP_BETWEEN_EXPERIMENTS = 1800`; see §7.5b).
-- **Injection campaign:** live (interleaved with the survey). Pool complete — **300 contiguous specs** (200 injections + 100 noise controls).
-- **Pre-registration:** locked, pushed publicly (see commit `f335294003eb`); pacing amendment §7.5b and implementation erratum §7.5c added, both dated.
+- **Live loop:** ready to resume after the §7.5d repair; replacement generation, independent sealing, tests, canaries, and both seal audits pass.
+- **Injection campaign:** 76 records collected before the repair pause. A blind numerical audit excluded 52 non-finite originals; 52 independently sealed replacements preserve the 300-valid-run target.
+- **Pre-registration:** locked and pushed publicly (see commit `f335294003eb`); later changes are disclosed in dated §7.5b–d amendments/errata.
 - **Tests:** public unit tests in [`tests/`](tests/) (grading rule, blinding, decision mapping); a local [`tools/audit_campaign.py`](tools/audit_campaign.py) checks pool contiguity, no-duplicate execution, and seal-manifest integrity without revealing truth.
 - **Results:** will not be reported until all 300 campaign runs complete. Blinding is enforced.
 

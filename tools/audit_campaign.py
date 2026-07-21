@@ -4,9 +4,9 @@ LOCAL campaign audit tool — NOT a public unit test.
 
 This is deliberately separate from tests/ because it inspects the local,
 off-repo campaign artifacts (pool spec filenames, the campaign records file,
-and the SHA-256 seal manifest). It never PRINTS truth contents: it checks
-structure (counts, contiguity, no duplicate spec execution) and verifies the
-seal manifest mechanically. It does not compare outcomes against truth.
+and the SHA-256 seal manifests). It never PRINTS truth contents: it checks
+structure, numerical finiteness, no duplicate execution, and both seals
+mechanically. It does not compare outcomes against truth.
 
 Usage:
     python tools/audit_campaign.py
@@ -18,11 +18,21 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from campaign_quality import load_excluded_spec_ids, validate_spec_file
+
 HOME = os.path.expanduser("~")
 CAMPAIGN_DIR = os.path.join(HOME, "experiment-data/ligo/campaign")
 POOL_DIR = os.path.join(CAMPAIGN_DIR, "pool")
 RECORDS_FILE = os.path.join(HOME, "experiment-data/ligo/campaign_2026_07.jsonl")
 MANIFEST = os.path.join(os.path.dirname(__file__), "..", "campaign_seal", "SHA256SUMS.txt")
+REPLACEMENT_DIR = os.path.join(HOME, "experiment-data/ligo/campaign_replacements_2026_07")
+REPLACEMENT_POOL_DIR = os.path.join(REPLACEMENT_DIR, "pool")
+REPLACEMENT_TRUTH = os.path.join(REPLACEMENT_DIR, "campaign_truth_replacements.jsonl")
+REPLACEMENT_INDEX = os.path.join(REPLACEMENT_DIR, "pool_index_replacements.json")
+REPLACEMENT_MANIFEST = os.path.join(
+    os.path.dirname(__file__), "..", "campaign_replacement_seal", "SHA256SUMS.txt"
+)
 
 EXPECTED_POOL_SIZE = 300
 
@@ -42,6 +52,55 @@ def check_pool_contiguous():
         missing = sorted(set(range(EXPECTED_POOL_SIZE)) - set(nums))
         return _fail(f"pool IDs not contiguous 0..{EXPECTED_POOL_SIZE-1}; missing {missing[:10]}")
     print(f"  OK: pool is {EXPECTED_POOL_SIZE} contiguous specs (spec_0000..spec_0299)")
+    return True
+
+
+def check_original_pool_numerical_validity():
+    """Confirm the frozen exclusion list exactly matches the mechanical audit."""
+    excluded = load_excluded_spec_ids()
+    invalid = set()
+    for i in range(EXPECTED_POOL_SIZE):
+        spec_id = f"spec_{i:04d}"
+        valid, _ = validate_spec_file(os.path.join(POOL_DIR, f"{spec_id}.npz"))
+        if not valid:
+            invalid.add(spec_id)
+    if invalid != excluded:
+        return _fail(
+            "mechanically invalid original specs do not match the frozen exclusion list"
+        )
+    print(f"  OK: exclusion list exactly matches {len(excluded)} non-finite originals")
+    return True
+
+
+def check_replacement_pool():
+    """Exactly one finite replacement exists for every frozen exclusion."""
+    if not os.path.isdir(REPLACEMENT_POOL_DIR) or not os.path.exists(REPLACEMENT_TRUTH):
+        return _fail("replacement pool is not complete")
+    excluded = load_excluded_spec_ids()
+    expected = {f"replacement_{spec_id}" for spec_id in excluded}
+    names = {name[:-4] for name in os.listdir(REPLACEMENT_POOL_DIR) if name.endswith(".npz")}
+    if names != expected:
+        return _fail(f"replacement roster has {len(names)} specs, expected {len(expected)}")
+    for spec_id in sorted(expected):
+        valid, reason = validate_spec_file(os.path.join(REPLACEMENT_POOL_DIR, f"{spec_id}.npz"))
+        if not valid:
+            return _fail(f"replacement {spec_id} is invalid: {reason}")
+
+    mappings = {}
+    with open(REPLACEMENT_TRUTH) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            mappings[row["spec_id"]] = row.get("replaces_spec_id")
+    expected_mappings = {f"replacement_{sid}": sid for sid in excluded}
+    if mappings != expected_mappings:
+        return _fail("replacement truth does not map one-to-one onto the exclusions")
+    with open(REPLACEMENT_INDEX) as f:
+        index_ids = set(json.load(f))
+    if index_ids != expected:
+        return _fail("replacement index does not match the replacement roster")
+    print(f"  OK: all {len(expected)} replacements are one-to-one and numerically finite")
     return True
 
 
@@ -100,19 +159,19 @@ def _all_keys(obj, out=None):
     return out
 
 
-def check_seal_manifest():
-    """Mechanically verify every hashed artifact still matches the sealed manifest."""
-    if not os.path.exists(MANIFEST):
-        return _fail(f"manifest not found at {MANIFEST}")
+def _check_seal_manifest(manifest, artifact_dir, label):
+    """Mechanically verify every hashed artifact still matches one seal manifest."""
+    if not os.path.exists(manifest):
+        return _fail(f"{label} manifest not found at {manifest}")
     bad = 0
     total = 0
-    with open(MANIFEST) as f:
+    with open(manifest) as f:
         for line in f:
             line = line.rstrip("\n")
             if not line:
                 continue
             digest, name = line.split("  ", 1)
-            path = os.path.join(CAMPAIGN_DIR, name)
+            path = os.path.join(artifact_dir, name)
             total += 1
             if not os.path.exists(path):
                 bad += 1
@@ -127,17 +186,30 @@ def check_seal_manifest():
                 print(f"  FAIL: hash mismatch (altered since seal): {name}")
     if bad:
         return _fail(f"{bad}/{total} sealed artifacts failed verification")
-    print(f"  OK: all {total} sealed artifacts match the manifest (unaltered)")
+    print(f"  OK: all {total} {label} artifacts match the manifest (unaltered)")
     return True
 
 
+def check_original_seal_manifest():
+    return _check_seal_manifest(MANIFEST, CAMPAIGN_DIR, "original sealed")
+
+
+def check_replacement_seal_manifest():
+    return _check_seal_manifest(
+        REPLACEMENT_MANIFEST, REPLACEMENT_DIR, "replacement sealed"
+    )
+
+
 def main():
-    print("Campaign audit (structure + seal only; no truth revealed):")
+    print("Campaign audit (structure + finiteness + seals; no truth revealed):")
     checks = [
         check_pool_contiguous,
+        check_original_pool_numerical_validity,
+        check_replacement_pool,
         check_no_duplicate_execution,
         check_records_carry_no_truth,
-        check_seal_manifest,
+        check_original_seal_manifest,
+        check_replacement_seal_manifest,
     ]
     ok = all(c() for c in checks)
     print("PASS" if ok else "FAILED")

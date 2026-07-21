@@ -118,6 +118,9 @@ PBH_BENCHMARK_TARGETS = [
 
 CAMPAIGN_FILE = os.path.join(DATA_DIR, "campaign_2026_07.jsonl")
 CAMPAIGN_POOL_DIR = os.path.expanduser("~/experiment-data/ligo/campaign/pool")
+CAMPAIGN_REPLACEMENT_POOL_DIR = os.path.expanduser(
+    "~/experiment-data/ligo/campaign_replacements_2026_07/pool"
+)
 CAMPAIGN_INJECTION_FRACTION = 0.50  # per §7.5 pacing: interleave 1/hour @ ~50%
 
 # Keys that are ALLOWED to appear in the planner summary dict. Anything else
@@ -165,34 +168,46 @@ def _campaign_completed_spec_ids() -> set[str]:
 
 def _next_campaign_target() -> dict | None:
     """
-    Pick the next unrun campaign spec, or None if the pool is exhausted / missing.
+    Pick the next valid unrun original or replacement spec, or None if exhausted.
     Returns a target dict shaped like normal survey targets, plus the spec path
     and the gps_time drawn from the spec (so pipeline aligns to the pre-generated
     noise/injection arrays).
     """
-    if not os.path.isdir(CAMPAIGN_POOL_DIR):
-        return None
+    from campaign_quality import load_excluded_spec_ids, validate_spec_file
+
     done = _campaign_completed_spec_ids()
-    for name in sorted(os.listdir(CAMPAIGN_POOL_DIR)):
-        if not name.endswith(".npz"):
+    excluded = load_excluded_spec_ids()
+    pools = (
+        (CAMPAIGN_POOL_DIR, True),
+        (CAMPAIGN_REPLACEMENT_POOL_DIR, False),
+    )
+    for pool_dir, is_original in pools:
+        if not os.path.isdir(pool_dir):
             continue
-        spec_id = name.replace(".npz", "")
-        if spec_id in done:
-            continue
-        spec_path = os.path.join(CAMPAIGN_POOL_DIR, name)
-        # gps_time is stored in the .npz itself; open it to get it (cheap: one field)
-        try:
-            import numpy as _np
-            gps = float(_np.load(spec_path)["gps"])
-        except Exception:
-            continue
-        return {
-            "gps_time": gps,
-            "detector": "H1",
-            "mode": "campaign",
-            "injection_spec_path": spec_path,
-            "spec_id": spec_id,
-        }
+        for name in sorted(os.listdir(pool_dir)):
+            if not name.endswith(".npz"):
+                continue
+            spec_id = name.replace(".npz", "")
+            if spec_id in done or (is_original and spec_id in excluded):
+                continue
+            spec_path = os.path.join(pool_dir, name)
+            valid, reason = validate_spec_file(spec_path)
+            if not valid:
+                print(f"[campaign] Skipping invalid spec {spec_id}: {reason}")
+                continue
+            try:
+                import numpy as _np
+                with _np.load(spec_path) as z:
+                    gps = float(z["gps"])
+            except Exception:
+                continue
+            return {
+                "gps_time": gps,
+                "detector": "H1",
+                "mode": "campaign",
+                "injection_spec_path": spec_path,
+                "spec_id": spec_id,
+            }
     return None
 
 

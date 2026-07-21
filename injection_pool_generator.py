@@ -30,6 +30,7 @@ import numpy as np
 # add repo to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from injections import generate_bbh, project_into_window, measured_psd, optimal_snr, network_snr
+from campaign_quality import EXPECTED_SAMPLES, require_finite
 
 # ---- config (frozen at lock time) ----
 POOL_DIR = os.path.expanduser("~/experiment-data/ligo/campaign/pool")
@@ -96,7 +97,9 @@ def try_fetch(gps):
     for det in ("H1", "L1"):
         try:
             ts = TimeSeries.fetch_open_data(det, start, end, cache=True)
-            if ts is None or len(ts) == 0:
+            if ts is None or len(ts) != EXPECTED_SAMPLES:
+                return None
+            if not np.isfinite(np.asarray(ts.value)).all():
                 return None
             out[det] = ts
         except Exception:
@@ -134,6 +137,7 @@ def main():
             continue
 
         # draw a valid noise window
+        data = None
         for attempt in range(5):
             gps = pick_noise_window(rng, excluded, [t["gps"] for t in tried_gps]
                                     if tried_gps and isinstance(tried_gps[0], dict) else tried_gps)
@@ -148,6 +152,8 @@ def main():
 
         H1 = np.array(data["H1"].value, dtype=np.float64)
         L1 = np.array(data["L1"].value, dtype=np.float64)
+        require_finite("H1 noise", H1)
+        require_finite("L1 noise", L1)
         n_samples = len(H1)
 
         truth = {
@@ -169,19 +175,28 @@ def main():
             fetch_start = gps - FETCH_SECONDS / 2
             inj_H1 = project_into_window(hp, hc, "H1", ra, dec, psi, gps, fetch_start, n_samples)
             inj_L1 = project_into_window(hp, hc, "L1", ra, dec, psi, gps, fetch_start, n_samples)
+            require_finite("unscaled H1 injection", inj_H1)
+            require_finite("unscaled L1 injection", inj_L1)
 
             psd_H1 = measured_psd(data["H1"])
             psd_L1 = measured_psd(data["L1"])
+            require_finite("H1 PSD", psd_H1)
+            require_finite("L1 PSD", psd_L1)
             snr_H1_raw = optimal_snr(inj_H1, psd_H1, FETCH_SECONDS)
             snr_L1_raw = optimal_snr(inj_L1, psd_L1, FETCH_SECONDS)
             net_raw = network_snr({"H1": snr_H1_raw, "L1": snr_L1_raw})
+            require_finite("unscaled network SNR", net_raw)
             if net_raw < 1e-6:
                 print(f"  {spec_id}: zero unscaled SNR, skipping"); continue
             scale = target_snr / net_raw
+            require_finite("injection scale", scale)
             inj_H1 *= scale
             inj_L1 *= scale
+            require_finite("scaled H1 injection", inj_H1)
+            require_finite("scaled L1 injection", inj_L1)
             achieved = network_snr({"H1": optimal_snr(inj_H1, psd_H1, FETCH_SECONDS),
                                     "L1": optimal_snr(inj_L1, psd_L1, FETCH_SECONDS)})
+            require_finite("achieved network SNR", achieved)
 
             truth.update({
                 "mass1": m1, "mass2": m2, "ra": ra, "dec": dec, "polarization": psi,

@@ -110,10 +110,16 @@ def _load_injection_spec(spec_path: str) -> dict:
     NOTE: this is called from run_pipeline when an injection is requested; the
     pipeline SUMS these into the fetched strain and never tells the planner.
     """
-    z = np.load(spec_path)
-    return {"H1": z["H1"], "L1": z["L1"],
-            "inj_H1": z["inj_H1"], "inj_L1": z["inj_L1"],
-            "gps": float(z["gps"])}
+    from campaign_quality import validate_spec_arrays
+
+    with np.load(spec_path) as z:
+        pack = {key: z[key] for key in z.files}
+    valid, reason = validate_spec_arrays(pack)
+    if not valid:
+        raise ValueError(f"invalid campaign spec: {reason}")
+    return {"H1": pack["H1"], "L1": pack["L1"],
+            "inj_H1": pack["inj_H1"], "inj_L1": pack["inj_L1"],
+            "gps": float(pack["gps"])}
 
 
 def run_pipeline(
@@ -147,6 +153,8 @@ def run_pipeline(
                 freq_sweep_hz_per_s=None, chirp_like=False, subsolar_mode=subsolar_mode,
                 error="No data returned from LIGO Open Science Center",
             )
+        if not np.isfinite(np.asarray(data.value)).all():
+            raise ValueError(f"{detector} strain contains non-finite values")
 
         # PHASE C: if this run is part of an injection campaign, add the
         # pre-generated waveform into BOTH the primary and coincidence strains.
@@ -264,6 +272,8 @@ def _detector_peak(detector: str, start: float, end: float, frange: tuple, gps_t
     data = TimeSeries.fetch_open_data(detector, fetch_start, fetch_end, cache=True)
     if data is None or len(data) == 0:
         return None
+    if not np.isfinite(np.asarray(data.value)).all():
+        raise ValueError(f"{detector} strain contains non-finite values")
 
     if injection_pack is not None:
         inj = injection_pack.get(f"inj_{detector}")

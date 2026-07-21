@@ -298,6 +298,42 @@ synthetic signal is present."
 
 **Artifact sealing (related hardening, same date).** The truth set (`campaign_truth.jsonl`), `pool_index.json`, `pool_gen.log`, and all 300 `pool/*.npz` were set filesystem read-only and hashed into `campaign_seal/SHA256SUMS.txt` (committed, off-repo data itself not committed). Sealing occurred after 7 campaign records had been collected; disclosed in `campaign_seal/SEAL_NOTE.md`. This makes the §7.5 blinding verifiable rather than honor-system.
 
+### §7.5d — ERRATUM (non-finite source data and blind replacements), 2026-07-21
+After 76 campaign records had been written, an operational review found repeated
+pipeline errors stating that input contained non-numerical values. The loop was
+stopped before any campaign truth was compared with any result. A mechanical audit
+of all four arrays in every pool artifact (`H1`, `L1`, `inj_H1`, `inj_L1`) found 52
+of 300 original specs containing at least one NaN or infinite value. The cause was
+the generator accepting GWOSC time series without checking numerical finiteness;
+NaNs could also propagate through PSD/SNR scaling because comparisons with NaN do
+not trigger the old `net_raw < 1e-6` guard.
+
+**Frozen exclusion rule:** an original spec is unusable if any of its four stored
+arrays contains a non-finite value. This rule is purely a data-integrity check: it
+does not use the injection/control label, signal parameters, planner output,
+physics-baseline output, or any scored outcome. The complete 52-ID list is committed
+in `campaign_repair/invalid_specs.json`. All 52 are excluded uniformly, including
+any that happened to produce a complete record. Sixteen had already been attempted
+among the first 76 records; the other 36 had not. Existing records remain append-only
+and will be retained as disclosed invalid attempts, not scored.
+
+**Replacement policy:** generate exactly one fresh, finite replacement for each of
+the 52 exclusions. A non-reporting script reads sealed truth internally to preserve
+each spec's preselected injection/control assignment. For injections it also
+preserves masses, sky position, orientation, polarization, phase, approximant, and
+target-SNR stratum; only the randomly drawn O3 noise window and achieved measured-noise
+SNR are regenerated. The script never prints truth values and never reads campaign
+outcomes. Replacements use distinct IDs (`replacement_spec_NNNN`) and live in a new
+directory with a separate truth file and seal. The original seal is not changed.
+
+**Final accounting:** the campaign target remains exactly 300 valid scored runs:
+248 finite originals plus 52 finite replacements, retaining the locked 200-injection
+/ 100-control assignment and all grading rules. The campaign JSONL may contain more
+than 300 physical lines because invalid attempts are preserved for auditability.
+Scoring will ignore all original IDs in the frozen exclusion list and use their
+replacement IDs instead. Detection, planner, and baseline versions are unchanged;
+this erratum repairs input validity, not the analysis or grading rules.
+
 ## §8 — Expansion ideas (ranked) + what's NOT worth it
 
 1. Injection engine + blind challenges (§7).
