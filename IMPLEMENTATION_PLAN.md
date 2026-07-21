@@ -1,7 +1,7 @@
 # LIGO Pipeline — Implementation Plan (approved in phases July 8, 2026)
 
 > **CURRENT STATUS (2026-07-21), appended — historical phase notes below are left as-written.**
-> W3 and the injection campaign shipped as described below. After 76 records, the campaign was paused for §7.5d: a blind finiteness audit found 52 invalid original pool specs caused by non-finite GWOSC samples. The repair preserves all original artifacts/records, excludes all 52 under an outcome-independent rule, generates 52 separately sealed replacements with the original assignments/parameters, and resumes only after numerical audits pass. The final target remains 300 valid scored runs. Still not done: O4 cutoff raise, B3 PBH fixes, F10 benchmark matrix, F11, Gravity Spy, dashboards, errata backfill for pre-campaign records.
+> W3 and the injection campaign shipped as described below. After 76 records, the campaign was paused for §7.5d: a blind finiteness audit found 52 invalid original pool specs caused by non-finite GWOSC samples. The repair preserved all original artifacts/records, excluded all 52 under an outcome-independent rule, generated 52 separately sealed replacements with the original assignments/parameters, and resumed only after numerical audits passed. The final target remains 300 valid scored runs. Still not done: O4 cutoff raise, B3 PBH fixes, F10 benchmark matrix, F11, Gravity Spy, dashboards, errata backfill for pre-campaign records.
 
 Companion to `REVIEW_FINDINGS.md` (the review) — this is the fix plan. Fixes are grouped F1–F12. Phase-1 batch (**F1, F2, F3, F4, F5, F9**) approved for implementation July 8, 2026. Phase-2 batch (**F6=W1, F7=W2, F8=W5, IceCube population**) approved and implemented July 10, 2026.
 

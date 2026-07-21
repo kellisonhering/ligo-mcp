@@ -119,7 +119,7 @@ The pipeline's blinding rests on two *different* guarantees, which the pre-regis
 
 ## Status (July 2026)
 
-- **Live loop:** ready to resume after the §7.5d repair; replacement generation, independent sealing, tests, canaries, and both seal audits pass.
+- **Live loop:** running again after the §7.5d repair; replacement generation, independent sealing, tests, canaries, and both seal audits passed before restart.
 - **Injection campaign:** 76 records collected before the repair pause. A blind numerical audit excluded 52 non-finite originals; 52 independently sealed replacements preserve the 300-valid-run target.
 - **Pre-registration:** locked and pushed publicly (see commit `f335294003eb`); later changes are disclosed in dated §7.5b–d amendments/errata.
 - **Tests:** public unit tests in [`tests/`](tests/) (grading rule, blinding, decision mapping); a local [`tools/audit_campaign.py`](tools/audit_campaign.py) checks pool contiguity, no-duplicate execution, and seal-manifest integrity without revealing truth.
