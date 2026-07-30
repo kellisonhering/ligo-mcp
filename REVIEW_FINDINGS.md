@@ -334,6 +334,18 @@ Scoring will ignore all original IDs in the frozen exclusion list and use their
 replacement IDs instead. Detection, planner, and baseline versions are unchanged;
 this erratum repairs input validity, not the analysis or grading rules.
 
+**Data completeness note, 2026-07-30 (not a rule change or a bug — an external-outage disclosure):**
+Two campaign records lost their LLM arm to transient Anthropic API failures:
+`spec_0231` (500 internal server error) and `spec_0246` (brief credit exhaustion,
+resolved same-day). Both are self-documented via populated `planner_error` /
+`vision.error` fields; `llm_review.decision` was forced to the safe default
+(`archive`, score `0.0`) rather than a real judgment. The physics-baseline arm
+(§7.5 rule 8) computed normally for both and is fully valid. No crash, no truth
+or blinding impact — confirmed via a full campaign audit immediately after.
+Affects 2/300 records (~0.7%); excluded from the LLM-vs-physics-baseline
+comparison at scoring time via the error fields, included in all other counts
+(pool size, record totals, false-alarm denominators, etc.).
+
 ## §8 — Expansion ideas (ranked) + what's NOT worth it
 
 1. Injection engine + blind challenges (§7).
