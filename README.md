@@ -1,134 +1,160 @@
-# ligo-mcp
+# LIGO-MCP: AI-Assisted Signal Triage and Evaluation
 
-A gravitational-wave detection pipeline that pairs lightweight signal-processing (Q-transform + numerical features, no template bank) with an LLM triage layer — and, more importantly, an **evaluation harness** that measures how well that combination actually performs against a pre-registered set of rules.
+[![Offline checks](https://github.com/kellisonhering/ligo-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/kellisonhering/ligo-mcp/actions/workflows/tests.yml)
 
-The pipeline runs continuously as a macOS background service, pulling real LIGO/Virgo detector data from public archives (GWOSC), and hides synthetic gravitational-wave signals inside real noise so the pipeline's hit rate and false-alarm rate can be measured honestly.
+A Python project that combines gravitational-wave signal processing, AI image
+interpretation, and a controlled evaluation of the resulting decisions.
 
----
+**The question:** when simulated signals are hidden in real detector noise, does
+an AI triage layer help decide which recordings deserve human investigation?
 
-## Why this exists
+**Current status, October 2026:** the 300-run campaign is complete and scored.
+The original background experiment is stopped. The results exposed limitations
+in both the numerical rules and AI integration; the repository includes the
+scorer, tests, findings, and preparation tools for a follow-up study.
 
-The question the project is trying to answer:
+## Try It Without an API Key
 
-> Can a lightweight, agentic triage system — Q-transform image + LLM interpretation — flag real gravitational-wave candidates well enough to be useful, or does effective detection require matched-filter–level physics?
-
-A methods paper is being drafted around the answer; results won't be shared until all 300 campaign runs complete and blinded scoring is done. The interesting result isn't whether the LLM flags GW150914 — that's a known-answer benchmark the loop re-runs periodically. It's the shape of the efficiency curve on the marginal signals — the ones with signal-to-noise ratio between 6 and 16, where the pipeline must distinguish weak signals from real detector noise.
-
-## Pre-registration (the scientific credential)
-
-Before running the injection campaign, the grading rules were **locked in advance** in [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) §7.5 — including what counts as a "catch", what counts as a false alarm, and the pre-committed interpretations for every possible result.
-
-The proof that those rules were fixed *before* results were seen is this repository's git history. The lock commit is [`f335294003eb`](https://github.com/kellisonhering/ligo-mcp/commit/f335294003eb):
-
-```
-🔒 Lock injection campaign pre-registration (§7.5)
-Committed 2026-07-12T14:48:25Z
-```
-
-Anyone can click that hash and see the commit timestamp on GitHub. If the rules change after this point, they appear as a new amendment section — never as an edit to §7.5. This is what turns "we ran an experiment" into "we ran a pre-registered experiment," which is the difference between a demo and a scientific result.
-
-## The injection campaign
-
-The evaluation harness runs 300 experiments interleaved with the normal survey loop:
-
-- **200 injections** — synthetic binary-black-hole waveforms injected into real O3 detector noise. Signal strength stratified: 20% invisible (SNR 4–6), 60% marginal (6–16), 20% obvious (16–24).
-- **100 noise-only controls** — no signal injected, so any "detection" here is a false alarm.
-
-The pipeline is blind to which is which. Ground truth (injection parameters, strengths, sky positions) is isolated in sealed answer-key files that are not read by the pipeline or planner. The original answer key remains unopened for scoring; the §7.5d replacement generator read it internally without displaying values so it could preserve the frozen assignments and signal parameters.
-
-Every run also logs the decision a **physics-only baseline** (no LLM) would have made on the same detector summary, so the same grading rules produce a "does the LLM add anything?" comparison as a free byproduct.
-
-The pre-registration commits to interpretations for every possible result — including the finding that the LLM adds no discrimination beyond the physics-only baseline. From §7.5: *"Every outcome above is publishable. There is no failure outcome."*
-
-## How the LLM fits in
-
-The LLM planner never sees raw detector strain. On each run it receives:
-
-- A **numerical summary** (JSON dict): energy contrast, chirp-like flag, dual-detector coincidence flag with time-of-flight check, catalog cross-match results (Fermi GBM, IceCube, SNEWS, data-quality flags), and — when present — the vision model's classification of the spectrogram.
-- The **Q-transform spectrogram image** is analyzed by Claude's vision model in a separate API call *before* the planner runs; the vision result is merged into the summary as `vision_signal_type`, `vision_shape`, `vision_confidence`, `vision_reasoning`, `vision_score_modifier`.
-
-The planner returns a structured decision from an enforced whitelist — `archive`, `benchmark_validated`, `glitch_candidate`, `rerun`, `follow_up`, `candidate_for_human_review` — plus a numeric `interesting_score` clamped to `[0, 1]`. Any decision outside the whitelist is rewritten to `archive`. Parse failures and API exceptions default to `archive` with `interesting_score = 0.0`.
-
-The planner never sees: raw strain data, injection ground truth, or any field named `injection`. Blinding is enforced at the code level by `_assert_blind()` in [`loop.py`](loop.py), which checks the summary against an allowlist of ~30 permitted key prefixes and raises `RuntimeError` before the LLM call if anything unexpected appears. Injection ground truth lives only in the separately sealed original and replacement answer keys. The §7.5d repair script is the sole pre-scoring reader: it uses the original key internally to preserve assignments and parameters, never displays them, and never reads campaign outcomes.
-
-## Repository layout
-
-**Start here:** [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) contains the design review and the locked pre-registration (§7.5); [`loop.py`](loop.py) is the main survey-loop entrypoint.
-
-| File | What it does |
-|---|---|
-| [`loop.py`](loop.py) | The continuous survey loop — picks a target, runs the pipeline, calls the LLM planner, writes a record |
-| [`pipeline.py`](pipeline.py) | Signal-processing: fetch strain data, Q-transform, energy contrast, chirp detection, coincidence |
-| [`planner.py`](planner.py) | LLM-facing prompts (Anthropic Claude) — planner, vision, target selector |
-| [`crossmatch.py`](crossmatch.py) | External catalog checks: Fermi GBM, IceCube, data quality, SNEWS |
-| [`catalog.py`](catalog.py) | GWTC event lookup + subsolar candidate lists |
-| [`canary.py`](canary.py) | Startup sanity checks — verifies every check works on a known-answer input |
-| [`injection_pool_generator.py`](injection_pool_generator.py) | Pre-generates injection/noise specs with strict numerical checks |
-| [`campaign_quality.py`](campaign_quality.py) | Shared numerical-validity gate and frozen exclusion-list loader |
-| [`tools/generate_campaign_replacements.py`](tools/generate_campaign_replacements.py) | Generates §7.5d replacements without printing sealed truth |
-| [`injections.py`](injections.py) | Applies an injection to a real strain window at runtime |
-| [`server.py`](server.py) | FastMCP server exposing the pipeline as tools (integrates with the OpenClaw gateway) |
-| [`reporter.py`](reporter.py) | Turns raw records into human-readable summaries and daily reports |
-| [`tests/`](tests/) | Public pytest suite — grading rule, blinding, decision mapping (no private data needed) |
-| [`tools/audit_campaign.py`](tools/audit_campaign.py) | Local audit — pool contiguity, no-dup execution, seal-manifest verification |
-| [`campaign_seal/`](campaign_seal/) | SHA-256 manifest + dated note sealing the truth artifacts (hashes only, no data) |
-| [`campaign_replacement_seal/`](campaign_replacement_seal/) | Independent SHA-256 seal for the 52 §7.5d replacements |
-| [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) | The design review (July 8, 2026), the pre-registration (§7.5), amendments (§7.5b/c), and status notes |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Fix batches (F1–F12) approved in phases, with completion status |
-
-## Running it
-
-**Dependencies:**
+Python 3.11 or newer is recommended. This demo uses invented records, makes no
+AI calls, and downloads no detector data. It demonstrates grading and report
+generation, not the live signal-processing pipeline.
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/kellisonhering/ligo-mcp.git
+cd ligo-mcp
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-demo.txt
+python analyze_injections.py demo --output demo-output
 ```
 
-Uses `gwpy` and `gwosc` for LIGO data access, `anthropic` for the LLM planner, `fastmcp` for the MCP interface, and `numpy`/`scipy` for signal-processing.
+Open `demo-output/REPORT.md` to read the report and view the accompanying charts.
+Every demo result is explicitly marked as invented. Use a new output directory
+for each run. [Setup and testing details](docs/SETUP.md) include Windows commands
+and the optional full-pipeline dependencies.
 
-**API key:** the planner reads `ANTHROPIC_API_KEY` from `~/.openclaw/.env`. If you're not running through OpenClaw, set it in your own environment.
+## What Was Built
 
-**Data location:** all experiment output goes to `~/experiment-data/ligo/` (outside iCloud-synced folders to avoid mid-write file locks).
+- **A detector-data pipeline:** public GWOSC strain data, Q-transform images,
+  numerical features, H1/L1 coincidence checks, and external catalog checks.
+- **An AI integration:** separate image interpretation and decision-making calls,
+  structured outputs, version stamps, and explicit API failure records.
+- **A controlled evaluation:** 200 simulated binary-black-hole signals and 100
+  controls, with catch rules fixed before collection and labels kept out of the
+  planner's inputs.
+- **An offline scorer:** strict joins, frozen exclusions and replacements,
+  confidence intervals, signal-strength curves, and a matched-filter yardstick.
+- **Operational checks:** append-only JSONL records, numerical-validity gates,
+  canary checks, integrity manifests, and an MCP interface.
 
-**Injection venv:** the injection pool generator uses `pycbc`, which is a heavy dependency. It lives in its own venv at `~/venvs/ligo-injections/` to keep the live loop's environment small:
+**Stack:** Python, NumPy, SciPy, Matplotlib, GWpy, GWOSC, PyCBC, Anthropic's API,
+FastMCP, pytest, and GitHub Actions. The free demo only needs NumPy and Matplotlib.
 
-```bash
-python -m venv ~/venvs/ligo-injections
-source ~/venvs/ligo-injections/bin/activate
-pip install pycbc numpy
+```mermaid
+flowchart LR
+    A[Detector strain + optional simulated signal] --> B[Q-transform and numerical features]
+    B --> C[Physics rule]
+    B --> D[Image interpretation]
+    D --> E[AI triage decision]
+    B --> E
+    C --> F[Append-only records]
+    E --> F
+    F --> G[Offline scorer]
+    H[Separately held answer key] --> G
+    G --> I[Metrics, charts, and limitations]
 ```
 
-**As a background service (macOS):** the survey loop runs as a standalone launchd agent (`com.kellison.ligo-loop`) so it survives shell exits, sleep, and reboots, and auto-restarts on crash. The plist template lives in `~/Library/LaunchAgents/`; the pipeline's own MCP tools (`start_loop_service`, `stop_loop_service`, `loop_service_status`) manage it via `launchctl`.
+## Completed Evaluation
 
-## Engineering and evaluation design
+The campaign used real O3 noise with signals added to H1 and L1. All 300 active
+records stamp Claude Sonnet 4.6 for both AI roles. These are the full operational
+counts, including failure defaults:
 
-This repo is the engineering side of a broader project on **evaluation harnesses for AI scientific judgment** — the recurring pattern of asking "can an LLM be trusted to make this call, and how would we know?" The design choices that make that measurable here:
+| Frozen rule | Signal-containing windows flagged | Noise controls flagged |
+| --- | ---: | ---: |
+| Physics: chirp-like OR H1/L1 coincidence | 119/200 (59.5%) | 37/100 (37.0%) |
+| AI: follow-up or human-review decision | 8/200 (4.0%) | 0/100 (0.0%) |
 
-- **Test infrastructure for a system that can't have a normal test suite** — you can't unit-test "is this a gravitational wave" because there's no ground truth. So we create controlled ground truth through synthetic injections and score against it.
-- **Pre-registration as a QA discipline** — locking the grading rules before seeing results, using git as the tamper-evident timestamp.
-- **Blinding boundaries in a codebase** — injection truth is architecturally isolated from the planner so the LLM can't accidentally see the answer key.
-- **Silent-failure hunting** — the July 2026 review turned up four checks that were failing silently and reporting fake pass results; the canary suite in `canary.py` exists so that class of bug can't come back.
-- **Version stamping** — every record carries `schema_version`, `PIPELINE_VERSION`, `DETECTION_ALGORITHM_VERSION`, `baseline_rule_version`, and prompt version hashes, so records from before and after a change can be re-scored coherently.
+![Completed campaign: primary catch and AI escalation by injected signal strength](docs/results/efficiency.png)
 
-## Blinding: two distinct mechanisms
+The numerical rule raised too many alarms on controls. AI escalation reduced
+those alarms but passed over most injected windows. Zero observed AI alarms on
+100 controls does not establish a zero false-alarm probability; its 95% interval
+extends to about 3.7%.
 
-The pipeline's blinding rests on two *different* guarantees, which the pre-registration keeps separate:
+Post-scoring inspection also found a test-design mismatch: signals were added
+only to H1/L1, while AI reasoning sometimes treated absent Virgo confirmation
+as negative evidence. The numerical chirp heuristic can compare unrelated
+frequency peaks rather than track one continuous signal. These results measure
+the implemented system and do not isolate a model's general scientific ability.
 
-- **Structural (planner)** — architecturally enforced. The planner LLM is stateless and receives only a numerical summary; `_assert_blind()` in [`loop.py`](loop.py) raises before any LLM call if an injection-shaped key reaches the summary. This cannot be violated by human discipline lapses.
-- **Procedural (human)** — an agreement not to compare outcomes against the sealed truth until all 300 runs finish. This is honor-system, but now *verifiable*: the truth artifacts are hashed in [`campaign_seal/SHA256SUMS.txt`](campaign_seal/SHA256SUMS.txt) and set read-only, so any post-hoc alteration is detectable.
+See the [full result summary and limitations](docs/RESULTS.md), including
+uncertainty, failure accounting, the matched-filter comparison, and aggregate
+machine-readable data. A flag in a signal-containing window is not proof that
+the added signal caused it. This is an experimental evaluation, not a validated
+astronomical search or a discovery claim.
 
-## Status (July 2026)
+## Engineering Decisions and Lessons
 
-- **Live loop:** running again after the §7.5d repair; replacement generation, independent sealing, tests, canaries, and both seal audits passed before restart.
-- **Injection campaign:** 76 records collected before the repair pause. A blind numerical audit excluded 52 non-finite originals; 52 independently sealed replacements preserve the 300-valid-run target.
-- **Pre-registration:** locked and pushed publicly (see commit `f335294003eb`); later changes are disclosed in dated §7.5b–d amendments/errata.
-- **Tests:** public unit tests in [`tests/`](tests/) (grading rule, blinding, decision mapping); a local [`tools/audit_campaign.py`](tools/audit_campaign.py) checks pool contiguity, no-duplicate execution, and seal-manifest integrity without revealing truth.
-- **Results:** will not be reported until all 300 campaign runs complete. Blinding is enforced.
+The project focuses on making failures observable and results inspectable:
 
-## Data attribution
+- Failed external checks are distinguished from successful checks with no alert.
+- Invalid source arrays are rejected mechanically, with excluded attempts retained.
+- An early incorrect baseline rule is repaired during scoring from raw fields.
+- API defaults stay in operational totals but are separated from available-call
+  comparisons so a missing judgment is not presented as an AI opinion.
+- Original grading outputs are preserved; changes are developed on open examples
+  and need fresh hidden examples for independent validation.
 
-This project uses public strain data from the [Gravitational Wave Open Science Center](https://gwosc.org) (GWOSC), a service of the LIGO Scientific Collaboration, the Virgo Collaboration, and KAGRA. LIGO is funded by the U.S. National Science Foundation and operated by Caltech and MIT. Virgo is funded by CNRS, INFN, and other European agencies and operated by the European Gravitational Observatory. KAGRA is hosted by the Institute for Cosmic Ray Research at the University of Tokyo.
+[Engineering notes](docs/ENGINEERING.md) explain these choices and their limits.
+This is an independent learning project developed with AI assistance from
+Claude Code and Codex for implementation, review, testing, and documentation.
 
-## License
+## Explore the Repository
 
-No license has been granted yet. The source is publicly viewable, but reuse, modification, and redistribution are not permitted until a LICENSE file is added.
+| Area | Start here |
+| --- | --- |
+| Free demo and dependencies | [Setup](docs/SETUP.md) |
+| Completed results and known limitations | [Results](docs/RESULTS.md) |
+| Architecture and implementation choices | [Engineering notes](docs/ENGINEERING.md) |
+| Scoring commands and conventions | [Scoring guide](SCORING_GUIDE.md) |
+| Original review and locked catch rules | [Review findings, section 7.5](REVIEW_FINDINGS.md) |
+| Original implementation phases | [Implementation plan](IMPLEMENTATION_PLAN.md) |
+| Signal processing / AI / MCP interface | [pipeline.py](pipeline.py), [planner.py](planner.py), [server.py](server.py) |
+| Offline scorer | [analyze_injections.py](analyze_injections.py), [campaign_scoring.py](campaign_scoring.py) |
+| Tests | [tests/](tests/) and [CI workflow](.github/workflows/tests.yml) |
+
+The July design review, locked rules, amendment history, code, and seal records
+are retained. Their status notes describe their dates, not current operation.
+The [previous public README](https://github.com/kellisonhering/ligo-mcp/blob/96d156409c72ce906fc0024d735f122ca3d083b1/README.md)
+is also preserved as a [verbatim historical snapshot](docs/history/README-July-2026.md).
+
+## Next Work
+
+Local preparation tools create a 30-example development comparison with
+consistent H1/L1 inputs and numbers-only versus image-assisted variants.
+[Fable batch preparation](fable_batch_prep.py) prepares groups of five examples;
+it does not submit requests. No Fable performance result is claimed. These
+examples have already been opened and cannot serve as independent validation.
+
+The original long-running experiment remains stopped. Running the demo or
+preparation tools does not restart it or create paid model requests.
+
+## Data and License
+
+The public result files contain aggregate measurements and charts. Raw strain,
+individual campaign records, truth-bearing pool files, credentials, and machine
+configuration are not included. The free demo is reproducible without them;
+independently re-scoring the original campaign requires its off-repository data.
+
+This project uses public strain data from the
+[Gravitational Wave Open Science Center](https://gwosc.org) (GWOSC), a service of
+the LIGO Scientific Collaboration, the Virgo Collaboration, and KAGRA. LIGO is
+funded by the U.S. National Science Foundation and operated by Caltech and MIT.
+Virgo is funded by CNRS, INFN, and other European agencies and operated by the
+European Gravitational Observatory. KAGRA is hosted by the Institute for Cosmic
+Ray Research at the University of Tokyo.
+
+No source-code license has been granted yet. The source remains publicly
+viewable; the existing licensing status is unchanged. GWOSC data has its own
+[usage and attribution terms](https://gwosc.org/acknowledgement/).

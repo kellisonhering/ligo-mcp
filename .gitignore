@@ -7,3 +7,6 @@ __pycache__/
 *.log
 experiment-data/
 .pytest_cache/
+.venv/
+.venv-*/
+demo-output*/

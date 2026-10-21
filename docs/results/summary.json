@@ -1,0 +1,977 @@
+{
+  "campaign": "July 2026 O3 H1/L1 injection campaign",
+  "graded_at_utc": "2026-10-19T03:09:28.234357+00:00",
+  "scorer_version": "1.1.0",
+  "counts": {
+    "scored": 300,
+    "injections": 200,
+    "controls": 100,
+    "excluded_invalid_attempts": 16,
+    "planner_errors": 2,
+    "vision_errors": 1,
+    "llm_skipped": 5,
+    "pipeline_errors": 5
+  },
+  "rules": {
+    "primary": "detection.chirp_like is True OR coincidence.coincident is True",
+    "secondary": "llm_review.decision in {follow_up, candidate_for_human_review}",
+    "truth_source": "sealed truth kind; injection.injected is never a signal label",
+    "snr_axis": "achieved_network_snr against the measured noise PSD",
+    "snr_bins": "[4,6), [6,8), ..., [22,24]; final upper edge included",
+    "intervals": "95% Wilson binomial intervals; empty groups are unavailable",
+    "snr50": "linear interpolation between adjacent nonempty bin centers; all crossings shown",
+    "comparison": "paired LLM secondary vs recomputed physics primary; API-error pairs excluded",
+    "available_call_comparison": "supplementary paired comparison also excluding pipeline-skipped AI calls",
+    "calibration": "five fixed score bins of width 0.2; unavailable LLM calls excluded",
+    "false_alarm_units": "fraction of noise-control windows, not events per year"
+  },
+  "metrics": {
+    "primary": {
+      "injections": {
+        "successes": 119,
+        "total": 200,
+        "fraction": 0.595,
+        "ci95": [
+          0.525797100813387,
+          0.6606222871749323
+        ]
+      },
+      "noise_controls": {
+        "successes": 37,
+        "total": 100,
+        "fraction": 0.37,
+        "ci95": [
+          0.2818236053432453,
+          0.46779470419057084
+        ]
+      },
+      "efficiency_curve": [
+        {
+          "low": 4,
+          "high": 6,
+          "center": 5.0,
+          "successes": 24,
+          "total": 41,
+          "fraction": 0.5853658536585366,
+          "ci95": [
+            0.4336710313403014,
+            0.7224345054574786
+          ]
+        },
+        {
+          "low": 6,
+          "high": 8,
+          "center": 7.0,
+          "successes": 8,
+          "total": 29,
+          "fraction": 0.27586206896551724,
+          "ci95": [
+            0.1469875510208796,
+            0.45717132416865935
+          ]
+        },
+        {
+          "low": 8,
+          "high": 10,
+          "center": 9.0,
+          "successes": 16,
+          "total": 30,
+          "fraction": 0.5333333333333333,
+          "ci95": [
+            0.3614229961987331,
+            0.6976761109230024
+          ]
+        },
+        {
+          "low": 10,
+          "high": 12,
+          "center": 11.0,
+          "successes": 14,
+          "total": 23,
+          "fraction": 0.6086956521739131,
+          "ci95": [
+            0.4078552239138171,
+            0.7784237720752205
+          ]
+        },
+        {
+          "low": 12,
+          "high": 14,
+          "center": 13.0,
+          "successes": 6,
+          "total": 8,
+          "fraction": 0.75,
+          "ci95": [
+            0.40927543031016905,
+            0.9285207872478909
+          ]
+        },
+        {
+          "low": 14,
+          "high": 16,
+          "center": 15.0,
+          "successes": 10,
+          "total": 20,
+          "fraction": 0.5,
+          "ci95": [
+            0.2992980081982124,
+            0.7007019918017876
+          ]
+        },
+        {
+          "low": 16,
+          "high": 18,
+          "center": 17.0,
+          "successes": 7,
+          "total": 8,
+          "fraction": 0.875,
+          "ci95": [
+            0.5291118177871466,
+            0.9775825085499434
+          ]
+        },
+        {
+          "low": 18,
+          "high": 20,
+          "center": 19.0,
+          "successes": 18,
+          "total": 22,
+          "fraction": 0.8181818181818182,
+          "ci95": [
+            0.6148339256287347,
+            0.9269311541657794
+          ]
+        },
+        {
+          "low": 20,
+          "high": 22,
+          "center": 21.0,
+          "successes": 8,
+          "total": 9,
+          "fraction": 0.8888888888888888,
+          "ci95": [
+            0.565000294423344,
+            0.980109112361455
+          ]
+        },
+        {
+          "low": 22,
+          "high": 24,
+          "center": 23.0,
+          "successes": 8,
+          "total": 10,
+          "fraction": 0.8,
+          "ci95": [
+            0.4901624715366419,
+            0.9433178485456246
+          ]
+        }
+      ],
+      "snr50": {
+        "status": "ambiguous_nonmonotonic_or_flat",
+        "value": null,
+        "upward_or_exact_crossings": [
+          8.741071428571429
+        ],
+        "downward_crossings": [
+          5.551630434782608
+        ],
+        "ambiguous_exact_points": [
+          15.0
+        ],
+        "isolated_exact_points": [],
+        "uncertainty": "not estimated; descriptive interpolation"
+      }
+    },
+    "secondary": {
+      "injections": {
+        "successes": 8,
+        "total": 200,
+        "fraction": 0.04,
+        "ci95": [
+          0.020405632066152316,
+          0.07693206820093293
+        ]
+      },
+      "noise_controls": {
+        "successes": 0,
+        "total": 100,
+        "fraction": 0.0,
+        "ci95": [
+          0.0,
+          0.03699349820698565
+        ]
+      },
+      "efficiency_curve": [
+        {
+          "low": 4,
+          "high": 6,
+          "center": 5.0,
+          "successes": 0,
+          "total": 41,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.08566757018443182
+          ]
+        },
+        {
+          "low": 6,
+          "high": 8,
+          "center": 7.0,
+          "successes": 0,
+          "total": 29,
+          "fraction": 0.0,
+          "ci95": [
+            1.3877787807814457e-17,
+            0.11696979849974067
+          ]
+        },
+        {
+          "low": 8,
+          "high": 10,
+          "center": 9.0,
+          "successes": 0,
+          "total": 30,
+          "fraction": 0.0,
+          "ci95": [
+            1.3877787807814457e-17,
+            0.11351339317396869
+          ]
+        },
+        {
+          "low": 10,
+          "high": 12,
+          "center": 11.0,
+          "successes": 1,
+          "total": 23,
+          "fraction": 0.043478260869565216,
+          "ci95": [
+            0.007716666143453135,
+            0.20991155070258866
+          ]
+        },
+        {
+          "low": 12,
+          "high": 14,
+          "center": 13.0,
+          "successes": 0,
+          "total": 8,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.3244075648838801
+          ]
+        },
+        {
+          "low": 14,
+          "high": 16,
+          "center": 15.0,
+          "successes": 0,
+          "total": 20,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.16112515805281927
+          ]
+        },
+        {
+          "low": 16,
+          "high": 18,
+          "center": 17.0,
+          "successes": 1,
+          "total": 8,
+          "fraction": 0.125,
+          "ci95": [
+            0.02241749145005667,
+            0.47088818221285345
+          ]
+        },
+        {
+          "low": 18,
+          "high": 20,
+          "center": 19.0,
+          "successes": 2,
+          "total": 22,
+          "fraction": 0.09090909090909091,
+          "ci95": [
+            0.025295428990995322,
+            0.27814946841605814
+          ]
+        },
+        {
+          "low": 20,
+          "high": 22,
+          "center": 21.0,
+          "successes": 1,
+          "total": 9,
+          "fraction": 0.1111111111111111,
+          "ci95": [
+            0.01989088763854488,
+            0.4349997055766559
+          ]
+        },
+        {
+          "low": 22,
+          "high": 24,
+          "center": 23.0,
+          "successes": 3,
+          "total": 10,
+          "fraction": 0.3,
+          "ci95": [
+            0.10779126740630107,
+            0.6032218525388545
+          ]
+        }
+      ],
+      "snr50": {
+        "status": "not_bracketed_below_50_percent",
+        "value": null,
+        "upward_or_exact_crossings": [],
+        "downward_crossings": [],
+        "ambiguous_exact_points": [],
+        "isolated_exact_points": [],
+        "uncertainty": "not estimated; descriptive interpolation"
+      }
+    }
+  },
+  "paired_comparison": {
+    "injection": {
+      "total": 199,
+      "physics": {
+        "successes": 119,
+        "total": 199,
+        "fraction": 0.5979899497487438,
+        "ci95": [
+          0.5286348850271693,
+          0.6636335014592188
+        ]
+      },
+      "llm": {
+        "successes": 8,
+        "total": 199,
+        "fraction": 0.04020100502512563,
+        "ci95": [
+          0.020508874081002597,
+          0.07730869702133003
+        ]
+      },
+      "both_flagged": 8,
+      "neither_flagged": 80,
+      "physics_only": 111,
+      "llm_only": 0,
+      "llm_minus_physics": -0.5577889447236181
+    },
+    "noise": {
+      "total": 99,
+      "physics": {
+        "successes": 37,
+        "total": 99,
+        "fraction": 0.37373737373737376,
+        "ci95": [
+          0.2848318300138313,
+          0.47207554677097374
+        ]
+      },
+      "llm": {
+        "successes": 0,
+        "total": 99,
+        "fraction": 0.0,
+        "ci95": [
+          0.0,
+          0.037353212067827365
+        ]
+      },
+      "both_flagged": 0,
+      "neither_flagged": 62,
+      "physics_only": 37,
+      "llm_only": 0,
+      "llm_minus_physics": -0.37373737373737376
+    }
+  },
+  "available_call_comparison": {
+    "injection": {
+      "total": 198,
+      "physics": {
+        "successes": 119,
+        "total": 198,
+        "fraction": 0.601010101010101,
+        "ci95": [
+          0.531504196824087,
+          0.666671144524065
+        ]
+      },
+      "llm": {
+        "successes": 8,
+        "total": 198,
+        "fraction": 0.04040404040404041,
+        "ci95": [
+          0.020613166178095266,
+          0.07768903068781367
+        ]
+      },
+      "both_flagged": 8,
+      "neither_flagged": 79,
+      "physics_only": 111,
+      "llm_only": 0,
+      "llm_minus_physics": -0.5606060606060606
+    },
+    "noise": {
+      "total": 95,
+      "physics": {
+        "successes": 37,
+        "total": 95,
+        "fraction": 0.3894736842105263,
+        "ci95": [
+          0.2975409519053738,
+          0.4899975946665097
+        ]
+      },
+      "llm": {
+        "successes": 0,
+        "total": 95,
+        "fraction": 0.0,
+        "ci95": [
+          0.0,
+          0.038864853539472936
+        ]
+      },
+      "both_flagged": 0,
+      "neither_flagged": 58,
+      "physics_only": 37,
+      "llm_only": 0,
+      "llm_minus_physics": -0.3894736842105263
+    }
+  },
+  "supplementary_confidence": {
+    "0.3": {
+      "efficiency_curve": [
+        {
+          "low": 4,
+          "high": 6,
+          "center": 5.0,
+          "successes": 24,
+          "total": 41,
+          "fraction": 0.5853658536585366,
+          "ci95": [
+            0.4336710313403014,
+            0.7224345054574786
+          ]
+        },
+        {
+          "low": 6,
+          "high": 8,
+          "center": 7.0,
+          "successes": 8,
+          "total": 29,
+          "fraction": 0.27586206896551724,
+          "ci95": [
+            0.1469875510208796,
+            0.45717132416865935
+          ]
+        },
+        {
+          "low": 8,
+          "high": 10,
+          "center": 9.0,
+          "successes": 16,
+          "total": 30,
+          "fraction": 0.5333333333333333,
+          "ci95": [
+            0.3614229961987331,
+            0.6976761109230024
+          ]
+        },
+        {
+          "low": 10,
+          "high": 12,
+          "center": 11.0,
+          "successes": 14,
+          "total": 23,
+          "fraction": 0.6086956521739131,
+          "ci95": [
+            0.4078552239138171,
+            0.7784237720752205
+          ]
+        },
+        {
+          "low": 12,
+          "high": 14,
+          "center": 13.0,
+          "successes": 6,
+          "total": 8,
+          "fraction": 0.75,
+          "ci95": [
+            0.40927543031016905,
+            0.9285207872478909
+          ]
+        },
+        {
+          "low": 14,
+          "high": 16,
+          "center": 15.0,
+          "successes": 10,
+          "total": 20,
+          "fraction": 0.5,
+          "ci95": [
+            0.2992980081982124,
+            0.7007019918017876
+          ]
+        },
+        {
+          "low": 16,
+          "high": 18,
+          "center": 17.0,
+          "successes": 7,
+          "total": 8,
+          "fraction": 0.875,
+          "ci95": [
+            0.5291118177871466,
+            0.9775825085499434
+          ]
+        },
+        {
+          "low": 18,
+          "high": 20,
+          "center": 19.0,
+          "successes": 18,
+          "total": 22,
+          "fraction": 0.8181818181818182,
+          "ci95": [
+            0.6148339256287347,
+            0.9269311541657794
+          ]
+        },
+        {
+          "low": 20,
+          "high": 22,
+          "center": 21.0,
+          "successes": 8,
+          "total": 9,
+          "fraction": 0.8888888888888888,
+          "ci95": [
+            0.565000294423344,
+            0.980109112361455
+          ]
+        },
+        {
+          "low": 22,
+          "high": 24,
+          "center": 23.0,
+          "successes": 8,
+          "total": 10,
+          "fraction": 0.8,
+          "ci95": [
+            0.4901624715366419,
+            0.9433178485456246
+          ]
+        }
+      ],
+      "noise_controls": {
+        "successes": 37,
+        "total": 100,
+        "fraction": 0.37,
+        "ci95": [
+          0.2818236053432453,
+          0.46779470419057084
+        ]
+      }
+    },
+    "0.45": {
+      "efficiency_curve": [
+        {
+          "low": 4,
+          "high": 6,
+          "center": 5.0,
+          "successes": 24,
+          "total": 41,
+          "fraction": 0.5853658536585366,
+          "ci95": [
+            0.4336710313403014,
+            0.7224345054574786
+          ]
+        },
+        {
+          "low": 6,
+          "high": 8,
+          "center": 7.0,
+          "successes": 8,
+          "total": 29,
+          "fraction": 0.27586206896551724,
+          "ci95": [
+            0.1469875510208796,
+            0.45717132416865935
+          ]
+        },
+        {
+          "low": 8,
+          "high": 10,
+          "center": 9.0,
+          "successes": 16,
+          "total": 30,
+          "fraction": 0.5333333333333333,
+          "ci95": [
+            0.3614229961987331,
+            0.6976761109230024
+          ]
+        },
+        {
+          "low": 10,
+          "high": 12,
+          "center": 11.0,
+          "successes": 14,
+          "total": 23,
+          "fraction": 0.6086956521739131,
+          "ci95": [
+            0.4078552239138171,
+            0.7784237720752205
+          ]
+        },
+        {
+          "low": 12,
+          "high": 14,
+          "center": 13.0,
+          "successes": 6,
+          "total": 8,
+          "fraction": 0.75,
+          "ci95": [
+            0.40927543031016905,
+            0.9285207872478909
+          ]
+        },
+        {
+          "low": 14,
+          "high": 16,
+          "center": 15.0,
+          "successes": 10,
+          "total": 20,
+          "fraction": 0.5,
+          "ci95": [
+            0.2992980081982124,
+            0.7007019918017876
+          ]
+        },
+        {
+          "low": 16,
+          "high": 18,
+          "center": 17.0,
+          "successes": 7,
+          "total": 8,
+          "fraction": 0.875,
+          "ci95": [
+            0.5291118177871466,
+            0.9775825085499434
+          ]
+        },
+        {
+          "low": 18,
+          "high": 20,
+          "center": 19.0,
+          "successes": 18,
+          "total": 22,
+          "fraction": 0.8181818181818182,
+          "ci95": [
+            0.6148339256287347,
+            0.9269311541657794
+          ]
+        },
+        {
+          "low": 20,
+          "high": 22,
+          "center": 21.0,
+          "successes": 8,
+          "total": 9,
+          "fraction": 0.8888888888888888,
+          "ci95": [
+            0.565000294423344,
+            0.980109112361455
+          ]
+        },
+        {
+          "low": 22,
+          "high": 24,
+          "center": 23.0,
+          "successes": 8,
+          "total": 10,
+          "fraction": 0.8,
+          "ci95": [
+            0.4901624715366419,
+            0.9433178485456246
+          ]
+        }
+      ],
+      "noise_controls": {
+        "successes": 37,
+        "total": 100,
+        "fraction": 0.37,
+        "ci95": [
+          0.2818236053432453,
+          0.46779470419057084
+        ]
+      }
+    },
+    "0.6": {
+      "efficiency_curve": [
+        {
+          "low": 4,
+          "high": 6,
+          "center": 5.0,
+          "successes": 0,
+          "total": 41,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.08566757018443182
+          ]
+        },
+        {
+          "low": 6,
+          "high": 8,
+          "center": 7.0,
+          "successes": 0,
+          "total": 29,
+          "fraction": 0.0,
+          "ci95": [
+            1.3877787807814457e-17,
+            0.11696979849974067
+          ]
+        },
+        {
+          "low": 8,
+          "high": 10,
+          "center": 9.0,
+          "successes": 0,
+          "total": 30,
+          "fraction": 0.0,
+          "ci95": [
+            1.3877787807814457e-17,
+            0.11351339317396869
+          ]
+        },
+        {
+          "low": 10,
+          "high": 12,
+          "center": 11.0,
+          "successes": 1,
+          "total": 23,
+          "fraction": 0.043478260869565216,
+          "ci95": [
+            0.007716666143453135,
+            0.20991155070258866
+          ]
+        },
+        {
+          "low": 12,
+          "high": 14,
+          "center": 13.0,
+          "successes": 0,
+          "total": 8,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.3244075648838801
+          ]
+        },
+        {
+          "low": 14,
+          "high": 16,
+          "center": 15.0,
+          "successes": 0,
+          "total": 20,
+          "fraction": 0.0,
+          "ci95": [
+            0.0,
+            0.16112515805281927
+          ]
+        },
+        {
+          "low": 16,
+          "high": 18,
+          "center": 17.0,
+          "successes": 2,
+          "total": 8,
+          "fraction": 0.25,
+          "ci95": [
+            0.07147921275210911,
+            0.590724569689831
+          ]
+        },
+        {
+          "low": 18,
+          "high": 20,
+          "center": 19.0,
+          "successes": 4,
+          "total": 22,
+          "fraction": 0.18181818181818182,
+          "ci95": [
+            0.07306884583422055,
+            0.3851660743712654
+          ]
+        },
+        {
+          "low": 20,
+          "high": 22,
+          "center": 21.0,
+          "successes": 2,
+          "total": 9,
+          "fraction": 0.2222222222222222,
+          "ci95": [
+            0.06322510711784673,
+            0.5474110308930109
+          ]
+        },
+        {
+          "low": 22,
+          "high": 24,
+          "center": 23.0,
+          "successes": 3,
+          "total": 10,
+          "fraction": 0.3,
+          "ci95": [
+            0.10779126740630107,
+            0.6032218525388545
+          ]
+        }
+      ],
+      "noise_controls": {
+        "successes": 0,
+        "total": 100,
+        "fraction": 0.0,
+        "ci95": [
+          0.0,
+          0.03699349820698565
+        ]
+      }
+    }
+  },
+  "score_reliability": {
+    "bins": [
+      {
+        "low": 0.0,
+        "high": 0.2,
+        "mean_score": 0.16604060913705584,
+        "injection_fraction": {
+          "successes": 122,
+          "total": 197,
+          "fraction": 0.6192893401015228,
+          "ci95": [
+            0.5498159166762442,
+            0.6841995115922805
+          ]
+        }
+      },
+      {
+        "low": 0.2,
+        "high": 0.4,
+        "mean_score": 0.2575,
+        "injection_fraction": {
+          "successes": 68,
+          "total": 88,
+          "fraction": 0.7727272727272727,
+          "ci95": [
+            0.6748572348431645,
+            0.8477825469759852
+          ]
+        }
+      },
+      {
+        "low": 0.4,
+        "high": 0.6,
+        "mean_score": null,
+        "injection_fraction": {
+          "successes": 0,
+          "total": 0,
+          "fraction": null,
+          "ci95": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "low": 0.6,
+        "high": 0.8,
+        "mean_score": 0.6825,
+        "injection_fraction": {
+          "successes": 8,
+          "total": 8,
+          "fraction": 1.0,
+          "ci95": [
+            0.67559243511612,
+            1.0
+          ]
+        }
+      },
+      {
+        "low": 0.8,
+        "high": 1.0,
+        "mean_score": null,
+        "injection_fraction": {
+          "successes": 0,
+          "total": 0,
+          "fraction": null,
+          "ci95": [
+            null,
+            null
+          ]
+        }
+      }
+    ],
+    "eligible": 293,
+    "note": "interesting_score is a ranking score, not a promised probability; fractions depend on the designed 200:100 class balance"
+  },
+  "version_groups": [
+    {
+      "versions": {
+        "detection_algorithm": "2.1.0",
+        "llm_temperature": 0.0,
+        "pipeline": "1.2.0",
+        "planner_model": "claude-sonnet-4-6",
+        "planner_prompt": "1.2.0",
+        "selector_model": "claude-sonnet-4-6",
+        "vision_model": "claude-sonnet-4-6",
+        "vision_prompt": "1.0.0"
+      },
+      "records": 300
+    }
+  ],
+  "provenance": {
+    "records_sha256": "4bc449f0fb72387f43ed09e4a709286de284fed7f6619fa1cd9657b118427c68",
+    "manifest_sha256": {
+      "original": "4d249376ee97dfbf4526ccef1c8c06e3487c04e7c1743360793bea28dc7b5c2c",
+      "replacement": "a86736e9f0e40628aac194da1975466e985b4cee015173d03431643ed543850c"
+    },
+    "reviewed_source_sha256": {
+      "analyze_injections.py": "72292cab83167a5c9789e977c320a2b444cd0793f9cd594f1bc06de173088d7c",
+      "campaign_scoring.py": "4ced1c86cc622a770b0919eece00ad20896f88d6fe8c7133b956f6112f119f00",
+      "campaign_matched_filter.py": "dca82ef0a900a783f170fb2aeb45f8de51b4d005e6ab761520ae7c5cb20ae765",
+      "scoring_report.py": "b6124e8c6354e6d6cf699d59870af060f924dc7e59b4e2469b24a01015c265e3",
+      "campaign_quality.py": "12bfc07b00433e0af4ff8d810592247d864b944de158a1fe9602a424fd44d96b",
+      "injections.py": "9bdb46ad064cc0ad15bd1565b9d3fe3ad9589933babf2abe9eb29a6f7f24dfaa",
+      "REVIEW_FINDINGS.md": "04f3c9e6ea6eab9e8e2ee51454a09de9ec370d200d52549a5db08cde0a381724",
+      "SCORING_GUIDE.md": "ba6a985cecb55ca286ee1348adffeb5841f0dcfb03543a2531f68de9dfc5d86c",
+      "tests/test_campaign_scoring.py": "611cb8f710fb6feabee18787f689d5e9b03be50fe1837993201b13273c7504fc",
+      "tests/test_campaign_matched_filter.py": "1d6d35fd389954e7f68fff40922492db486f202e2186f0a14b62dedaa9c5b8cf"
+    },
+    "runtime": {
+      "python": "3.14.2",
+      "packages": {
+        "numpy": "2.3.5",
+        "matplotlib": "3.11.0",
+        "gwpy": "4.0.1",
+        "pycbc": "2.11.0",
+        "scipy": "1.16.3"
+      },
+      "git_head": "96d156409c72ce906fc0024d735f122ca3d083b1"
+    },
+    "original_results_sha256": "9ed7ac370e8881f8ea064ed4272e9ffc8c50f3c92ea0b4120f0441d6afc12d1a",
+    "original_asset_sha256": {
+      "efficiency.csv": "3cb5d30a4492b1aaf2ac0e3955bdedfa3ea7f45bd163bddf6fe92e312c0c0ac1",
+      "efficiency.png": "0f9214a249887ac306e9a8fd016d92579243e219152847d3fd40607c6fc7b777",
+      "score_reliability.png": "573bd80e27f3bcd9ca0d0fbb1da5694ceec108f686c35316061f911fdb7aa2ff",
+      "matched_filter.png": "04226b366803d23184cf942ce70b95f437cf20ea565847f71f2e8e3a9f872155"
+    },
+    "csv_newlines": "LF in public copy; original asset hashes refer to untouched source files"
+  },
+  "scope": "Aggregate export only. Full independent re-scoring needs the off-repository campaign pool and records."
+}
