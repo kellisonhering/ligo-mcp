@@ -1,0 +1,61 @@
+name: Offline checks
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    name: Free demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-demo.txt
+      - run: python -m pip install -r requirements-demo.txt
+      - run: python analyze_injections.py demo --output demo-output
+      - name: Verify all demo outputs
+        working-directory: demo-output
+        run: sha256sum -c SHA256SUMS.txt
+
+  unit-tests:
+    name: Offline unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-demo.txt
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest tests/ -q
+
+  matched-filter:
+    name: Matched-filter analytic checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-injections.txt
+            requirements-demo.txt
+      - run: python -m pip install -r requirements-injections.txt
+      - run: python -m unittest discover -s tests -p test_campaign_matched_filter.py -v

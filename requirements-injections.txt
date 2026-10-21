@@ -1,0 +1,3 @@
+-r requirements-demo.txt
+gwpy==4.0.1
+pycbc==2.11.0
